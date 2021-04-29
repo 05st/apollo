@@ -8,6 +8,10 @@ pub enum Token {
 
     LeftParen,
     RightParen,
+    LeftBrace,
+    RightBrace,
+    LeftBracket,
+    RightBracket,
     
     Equal,
     EqualEqual,
@@ -25,6 +29,7 @@ pub enum Token {
     Percent,
     Caret,
     
+    Dot,
     Semicolon,
 
     UNDEFINED,
@@ -77,6 +82,10 @@ impl Lexer {
                 },
                 '(' => tokens.push_front(Token::LeftParen),
                 ')' => tokens.push_front(Token::RightParen),
+                '{' => tokens.push_front(Token::LeftBrace),
+                '}' => tokens.push_front(Token::RightBrace),
+                '[' => tokens.push_front(Token::LeftBracket),
+                ']' => tokens.push_front(Token::RightBracket),
                 '=' => tokens.push_front(
                     if *iter.peek().unwrap_or(&'\0') == '=' {
                         iter.next();
@@ -115,6 +124,7 @@ impl Lexer {
                 '/' => tokens.push_front(Token::Slash),
                 '%' => tokens.push_front(Token::Percent),
                 '^' => tokens.push_front(Token::Caret),
+                '.' => tokens.push_front(Token::Dot),
                 ';' => tokens.push_front(Token::Semicolon),
                 _ => (),
             }
