@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Token {
     Number(f64),
     Identifier(String),
@@ -30,7 +30,6 @@ pub enum Token {
     UNDEFINED,
 }
 
-#[derive(Debug)]
 pub struct Lexer {
     tokens: VecDeque<Token>
 }
@@ -40,13 +39,13 @@ impl Lexer {
         self.tokens.pop_back().unwrap_or(Token::UNDEFINED)
     }
 
-    pub fn peek(&self) -> &Token {
-        self.tokens.back().unwrap_or(&Token::UNDEFINED)
+    pub fn peek(&self) -> Token {
+        self.tokens.back().unwrap_or(&Token::UNDEFINED).clone()
     }
 
     pub fn new(input: String) -> Lexer {
         let mut tokens = VecDeque::new();
-        let mut iter = input.chars().peekable();
+        let mut iter = input.trim().chars().peekable();
 
         while let Some(c) = iter.next() {
             match c {
@@ -59,7 +58,7 @@ impl Lexer {
                             _ => break,
                         }
                     }
-                    tokens.push_back(Token::Number(buffer.parse::<f64>().expect("Failed to parge to f64")));
+                    tokens.push_front(Token::Number(buffer.parse::<f64>().expect("Failed to parge to f64")));
                 },
                 x if x.is_alphabetic() => {
                     let mut buffer = String::new();
@@ -71,14 +70,14 @@ impl Lexer {
                         }
                     }
                     match buffer.as_str() {
-                        "true" => tokens.push_back(Token::Bool(true)),
-                        "false" => tokens.push_back(Token::Bool(false)),
-                        _ => tokens.push_back(Token::Identifier(buffer)),
+                        "true" => tokens.push_front(Token::Bool(true)),
+                        "false" => tokens.push_front(Token::Bool(false)),
+                        _ => tokens.push_front(Token::Identifier(buffer)),
                     }
                 },
-                '(' => tokens.push_back(Token::LeftParen),
-                ')' => tokens.push_back(Token::RightParen),
-                '=' => tokens.push_back(
+                '(' => tokens.push_front(Token::LeftParen),
+                ')' => tokens.push_front(Token::RightParen),
+                '=' => tokens.push_front(
                     if *iter.peek().unwrap_or(&'\0') == '=' {
                         iter.next();
                         Token::EqualEqual
@@ -86,7 +85,7 @@ impl Lexer {
                         Token::Equal
                     }
                 ),
-                '!' => tokens.push_back(
+                '!' => tokens.push_front(
                     if *iter.peek().unwrap_or(&'\0') == '=' {
                         iter.next();
                         Token::NotEqual
@@ -94,7 +93,7 @@ impl Lexer {
                         Token::Not
                     }
                 ),
-                '>' => tokens.push_back(
+                '>' => tokens.push_front(
                     if *iter.peek().unwrap_or(&'\0') == '=' {
                         iter.next();
                         Token::GreaterEqual
@@ -102,7 +101,7 @@ impl Lexer {
                         Token::Greater
                     }
                 ),
-                '<' => tokens.push_back(
+                '<' => tokens.push_front(
                     if *iter.peek().unwrap_or(&'\0') == '=' {
                         iter.next();
                         Token::LesserEqual
@@ -110,13 +109,13 @@ impl Lexer {
                         Token::Lesser
                     }
                 ),
-                '+' => tokens.push_back(Token::Plus),
-                '-' => tokens.push_back(Token::Dash),
-                '*' => tokens.push_back(Token::Asterisk),
-                '/' => tokens.push_back(Token::Slash),
-                '%' => tokens.push_back(Token::Percent),
-                '^' => tokens.push_back(Token::Caret),
-                ';' => tokens.push_back(Token::Semicolon),
+                '+' => tokens.push_front(Token::Plus),
+                '-' => tokens.push_front(Token::Dash),
+                '*' => tokens.push_front(Token::Asterisk),
+                '/' => tokens.push_front(Token::Slash),
+                '%' => tokens.push_front(Token::Percent),
+                '^' => tokens.push_front(Token::Caret),
+                ';' => tokens.push_front(Token::Semicolon),
                 _ => (),
             }
         }

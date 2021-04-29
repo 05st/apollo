@@ -10,6 +10,7 @@ fn main() {
         std::io::stdin().read_line(&mut input).unwrap();
 
         let lexer = Lexer::new(input);
-        println!("{:?}", lexer);
+        let mut parser = Parser::new(lexer);
+        println!("{:?}", parser.parse());
     }
 }
