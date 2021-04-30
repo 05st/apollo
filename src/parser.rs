@@ -95,7 +95,7 @@ impl Parser {
                 },
                 Token::Dash => {
                     self.lexer.next();
-                    node = ASTNode::Binary(Operator::Add, Box::new(node), Box::new(self.term()?));
+                    node = ASTNode::Binary(Operator::Subtract, Box::new(node), Box::new(self.term()?));
                 },
                 _ => break,
             }

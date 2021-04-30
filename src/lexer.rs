@@ -50,7 +50,8 @@ impl Lexer {
 
     pub fn new(input: String) -> Lexer {
         let mut tokens = VecDeque::new();
-        let mut iter = input.trim().chars().peekable();
+        let split = input.split_whitespace().collect::<String>();
+        let mut iter = split.trim().chars().peekable();
 
         while let Some(c) = iter.next() {
             match c {
@@ -59,18 +60,18 @@ impl Lexer {
                     buffer += &c.to_string();
                     while let Some(d) = iter.peek() {
                         match d {
-                            '0'..='9' => buffer += &iter.next().unwrap().to_string(),
+                            '0'..='9' | '.' => buffer += &iter.next().unwrap().to_string(),
                             _ => break,
                         }
                     }
                     tokens.push_front(Token::Number(buffer.parse::<f64>().expect("Failed to parge to f64")));
                 },
-                x if x.is_alphabetic() => {
+                'a'..='z' | 'A'..='Z' | '_' => {
                     let mut buffer = String::new();
                     buffer += &c.to_string();
                     while let Some(d) = iter.peek() {
                         match d {
-                            y if y.is_alphabetic() => buffer += &iter.next().unwrap().to_string(),
+                            'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => buffer += &iter.next().unwrap().to_string(),
                             _ => break,
                         }
                     }
