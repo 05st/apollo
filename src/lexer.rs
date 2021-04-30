@@ -1,10 +1,15 @@
 use std::collections::VecDeque;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Number(f64),
     Identifier(String),
     Bool(bool),
+    Str(String),
+
+    Let,
+    Def,
+    Write,
 
     LeftParen,
     RightParen,
@@ -33,8 +38,10 @@ pub enum Token {
     Semicolon,
 
     UNDEFINED,
+    EOF,
 }
 
+#[derive(Clone, Debug)]
 pub struct Lexer {
     tokens: VecDeque<Token>
 }
@@ -50,8 +57,7 @@ impl Lexer {
 
     pub fn new(input: String) -> Lexer {
         let mut tokens = VecDeque::new();
-        let split = input.split_whitespace().collect::<String>();
-        let mut iter = split.trim().chars().peekable();
+        let mut iter = input.trim().chars().peekable();
 
         while let Some(c) = iter.next() {
             match c {
@@ -64,7 +70,7 @@ impl Lexer {
                             _ => break,
                         }
                     }
-                    tokens.push_front(Token::Number(buffer.parse::<f64>().expect("Failed to parge to f64")));
+                    tokens.push_front(Token::Number(buffer.parse::<f64>().expect("Failed to parse to f64")));
                 },
                 'a'..='z' | 'A'..='Z' | '_' => {
                     let mut buffer = String::new();
@@ -78,8 +84,24 @@ impl Lexer {
                     match buffer.as_str() {
                         "true" => tokens.push_front(Token::Bool(true)),
                         "false" => tokens.push_front(Token::Bool(false)),
+                        "let" => tokens.push_front(Token::Let),
+                        "def" => tokens.push_front(Token::Def),
+                        "write" => tokens.push_front(Token::Write),
                         _ => tokens.push_front(Token::Identifier(buffer)),
                     }
+                },
+                '"' => {
+                    let mut buffer = String::new();
+                    while let Some(d) = iter.peek() {
+                        match d {
+                            '"' => {
+                                iter.next();
+                                break;
+                            },
+                            _ => buffer += &iter.next().unwrap().to_string(),
+                        }
+                    }
+                    tokens.push_front(Token::Str(buffer));
                 },
                 '(' => tokens.push_front(Token::LeftParen),
                 ')' => tokens.push_front(Token::RightParen),
@@ -131,6 +153,7 @@ impl Lexer {
             }
         }
 
+        tokens.push_front(Token::EOF);
         Lexer { tokens }
     }
 }
