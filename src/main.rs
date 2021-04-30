@@ -1,8 +1,10 @@
 mod lexer;
 mod parser;
+mod interpreter;
 
 use lexer::*;
 use parser::*;
+use interpreter::*;
 
 fn main() {
     loop {
@@ -11,6 +13,12 @@ fn main() {
 
         let lexer = Lexer::new(input);
         let mut parser = Parser::new(lexer);
-        println!("{:?}", parser.parse());
+        match parser.parse() {
+            Ok(root) => {
+                let mut interpreter = Interpreter::new(root);
+                interpreter.interpret();
+            },
+            Err(m) => println!("{}", m),
+        }
     }
 }

@@ -1,6 +1,6 @@
 use crate::lexer::*;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Operator {
     Add,
     Subtract,
@@ -10,7 +10,7 @@ pub enum Operator {
     Exponent,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum ASTNode {
     Number(f64),
     Bool(bool),
