@@ -7,6 +7,7 @@ pub enum Operator {
     Multiply,
     Divide,
     Modulo,
+    Exponent,
 
     Equal,
     Not,
@@ -228,16 +229,22 @@ impl Parser {
     }
 
     fn unary(&mut self) -> RASTNode {
-        match self.lexer.peek() {
+        let node = match self.lexer.peek() {
             Token::Not => {
                 self.lexer.next();
-                Ok(ASTNode::Unary(Operator::Not, Box::new(self.unary()?)))
+                ASTNode::Unary(Operator::Not, Box::new(self.unary()?))
             },
             Token::Dash => {
                 self.lexer.next();
-                Ok(ASTNode::Unary(Operator::Subtract, Box::new(self.unary()?)))
+                ASTNode::Unary(Operator::Subtract, Box::new(self.unary()?))
             },
-            _ => Ok(self.item()?),
+            _ => self.item()?,
+        };
+        if let Token::Caret = self.lexer.peek() {
+            self.lexer.next();
+            Ok(ASTNode::Binary(Operator::Exponent, Box::new(node), Box::new(self.unary()?)))
+        } else {
+            Ok(node)
         }
     }
 

@@ -111,6 +111,12 @@ impl Interpreter {
                             _ => Err(String::from("Invalid types for Modulo operator")),
                         }
                     },
+                    Operator::Exponent => {
+                        match (eleft, eright) {
+                            (Value::Number(x), Value::Number(y)) => Ok(Value::Number(x.powf(y))),
+                            _ => Err(String::from("Invalid types for Exponent operator")),
+                        }
+                    },
                     Operator::Equal => Ok(Value::Bool(eleft == eright)),
                     Operator::NotEqual => Ok(Value::Bool(eleft != eright)),
                     Operator::Greater => {
