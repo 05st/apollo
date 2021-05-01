@@ -11,8 +11,63 @@ pub enum Value {
 
 type RValue = Result<Value, String>;
 
+#[derive(Clone)]
+struct Environment {
+    parent: Option<Box<Environment>>,
+    values: HashMap<String, Value>,
+}
+
+impl Environment {
+    fn new() -> Environment {
+        Environment {
+            parent: Option::None,
+            values: HashMap::new(),
+        }
+    }
+
+    fn new_child(parent: Environment) -> Environment {
+        Environment {
+            parent: Option::Some(Box::new(parent)),
+            values: HashMap::new(),
+        }
+    }
+
+    fn get(&self, id: String) -> RValue {
+        if self.values.contains_key(&id) {
+            Ok(self.values.get(&id).unwrap().clone())
+        } else {
+            if let Option::Some(p) = &self.parent {
+                p.get(id)
+            } else {
+                Err(format!("Undefined variable {}", id))
+            }
+        }
+    }
+
+    fn set(&mut self, id: String, val: Value) -> RValue {
+        if self.values.contains_key(&id) {
+            *self.values.get_mut(&id).unwrap() = val.clone();
+            Ok(val)
+        } else {
+            if let Option::Some(p) = &mut self.parent {
+                p.set(id, val)
+            } else{
+                Err(format!("Undeclared variable {}", id))
+            }
+        }
+    }
+
+    fn insert(&mut self, id: String, val: Value) {
+        if self.values.contains_key(&id) {
+            self.set(id, val).unwrap();
+        } else {
+            self.values.insert(id, val.clone());
+        }
+    }
+}
+
 pub struct Interpreter {
-    symbols: HashMap<String, Value>,
+    environment: Environment,
 }
 
 impl Interpreter {
@@ -20,12 +75,7 @@ impl Interpreter {
         match node {
             ASTNode::Assign(id, val) => {
                 let eval = self.expression(*val)?;
-                if self.symbols.contains_key(&id) {
-                    *self.symbols.get_mut(&id).unwrap() = eval.clone();
-                    Ok(eval)
-                } else {
-                    Err(format!("Attempt to assign undeclared variable {}", id))
-                }
+                self.environment.set(id, eval)
             },
             ASTNode::Binary(op, left, right) => { // Eventually rewrite
                 let (eleft, eright) = (self.expression(*left)?, self.expression(*right)?);
@@ -108,13 +158,7 @@ impl Interpreter {
                     _ => Err(format!("Invalid unary operator {:?}", op)),
                 }
             },
-            ASTNode::Variable(id) => {
-                if self.symbols.contains_key(&id) {
-                    Ok(self.symbols.get(&id).unwrap().clone())
-                } else {
-                    Err(format!("Attempt to reference undefined variable {}", id))
-                }
-            },
+            ASTNode::Variable(id) => self.environment.get(id),
             ASTNode::Number(x) => Ok(Value::Number(x)),
             ASTNode::Bool(x) => Ok(Value::Bool(x)),
             ASTNode::Str(x) => Ok(Value::Str(x)),
@@ -133,6 +177,17 @@ impl Interpreter {
                     }
                 }
             },
+            ASTNode::Block(decls) => {
+                let prev = self.environment.clone();
+                self.environment = Environment::new_child(prev); 
+                for decl in decls {
+                    let err = self.statement(decl);
+                    if err != String::new() {
+                        return err;
+                    }
+                }
+                self.environment = *self.environment.parent.clone().unwrap();
+            },
             ASTNode::VarDecl(id, val) => {
                 let eval = match *val {
                     Some(expr) => {
@@ -143,7 +198,7 @@ impl Interpreter {
                     },
                     None => Value::Null,
                 };
-                self.symbols.insert(id, eval);
+                self.environment.insert(id, eval);
             },
             ASTNode::ExprStmt(expr) => {
                 match self.expression(*expr) {
@@ -160,7 +215,7 @@ impl Interpreter {
                     Value::Number(x) => println!("{}", x),
                     Value::Bool(x) => println!("{}", x),
                     Value::Str(x) => println!("{}", x),
-                    Value::Null => println!("Null"),
+                    Value::Null => println!("null"),
                 }
             },
             _ => return String::from("Invalid statement"),
@@ -174,7 +229,7 @@ impl Interpreter {
 
     pub fn new() -> Interpreter {
         Interpreter {
-            symbols: HashMap::new(),
+            environment: Environment::new(),
         }
     }
 }

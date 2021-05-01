@@ -30,6 +30,7 @@ pub enum ASTNode {
     ExprStmt(Box<ASTNode>),
     Variable(String),
     Compound(Vec<ASTNode>),
+    Block(Vec<ASTNode>),
     Assign(String, Box<ASTNode>),
 }
 
@@ -89,7 +90,7 @@ impl Parser {
     fn statement(&mut self) -> RASTNode {
         match self.lexer.peek() {
             Token::LeftBrace => Ok(self.block()?),
-            Token::Print => Ok(self.write_stmt()?),
+            Token::Print => Ok(self.print_stmt()?),
             _ => Ok(self.expr_stmt()?),
         }
     }
@@ -104,13 +105,13 @@ impl Parser {
             }
         }
         self.expect(Token::RightBrace)?;
-        Ok(ASTNode::Compound(declarations))
+        Ok(ASTNode::Block(declarations))
     }
 
-    fn write_stmt(&mut self) -> RASTNode {
+    fn print_stmt(&mut self) -> RASTNode {
         self.expect(Token::Print)?;
         self.expect(Token::LeftParen)?;
-        let node = ASTNode::Write(Box::new(self.equality()?));
+        let node = ASTNode::Write(Box::new(self.expression()?));
         self.expect(Token::RightParen)?;
         self.expect(Token::Semicolon)?;
         Ok(node)
@@ -123,18 +124,22 @@ impl Parser {
     }
 
     fn expression(&mut self) -> RASTNode {
-        match self.lexer.peek() {
-            Token::Identifier(_) => Ok(self.assignment()?),
-            _ => Ok(self.equality()?),
-        }
+        self.assignment()
     }
 
     fn assignment(&mut self) -> RASTNode {
-        if let Token::Identifier(id) = self.lexer.next() {
-            self.expect(Token::Equal)?;
-            Ok(ASTNode::Assign(id, Box::new(self.expression()?)))
+        let expr = self.equality()?;
+
+        if let Token::Equal = self.lexer.peek() {
+            self.lexer.next();
+            let value = self.assignment()?;
+            if let ASTNode::Variable(id) = expr {
+                Ok(ASTNode::Assign(id, Box::new(value)))
+            } else {
+                Err(String::from("Invalid assignment target"))
+            }
         } else {
-            Err(String::from("Expected Identifier"))
+            Ok(expr)
         }
     }
 
@@ -237,7 +242,8 @@ impl Parser {
     }
 
     fn item(&mut self) -> RASTNode {
-        match self.lexer.next() {
+        let token = self.lexer.next();
+        match token {
             Token::Number(x) => Ok(ASTNode::Number(x)),
             Token::Bool(x) => Ok(ASTNode::Bool(x)),
             Token::Str(x) => Ok(ASTNode::Str(x)),
@@ -248,7 +254,7 @@ impl Parser {
                 Ok(expr)
             },
             Token::Identifier(x) => Ok(ASTNode::Variable(x)),
-            _ => Err(String::from("Invalid item token"))
+            _ => Err(format!("Invalid item token {:?}", token)),
         }
     }
 

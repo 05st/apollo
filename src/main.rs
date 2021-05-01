@@ -10,13 +10,15 @@ fn main() {
     let mut interpreter = Interpreter::new();
 
     let code = "
-        let x = 4;
-        let y = x*2;
-        print(x*2 == y);
+        let test = 10;
+        let y = 5;
         {
-            x = 2;
-            print(x*4 == y);
+            let test = 5;
+            y = 2;
+            print(test - y);
         }
+        print(test);
+        print(y);
     ";
 
     println!("{}", interpreter.interpret(Parser::new(Lexer::new(code.to_string())).parse().unwrap()));
