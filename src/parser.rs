@@ -22,6 +22,7 @@ pub enum ASTNode {
     Number(f64),
     Bool(bool),
     Str(String),
+    Null,
     Binary(Operator, Box<ASTNode>, Box<ASTNode>),
     Unary(Operator, Box<ASTNode>),
     VarDecl(String, Box<Option<ASTNode>>),
@@ -73,7 +74,7 @@ impl Parser {
             let node = ASTNode::VarDecl(id, Box::new({
                 if let Token::Equal = self.lexer.peek() {
                     self.lexer.next();
-                    Option::Some(self.expression()?)
+                    Option::Some(self.equality()?)
                 } else {
                     Option::None
                 }
@@ -88,7 +89,7 @@ impl Parser {
     fn statement(&mut self) -> RASTNode {
         match self.lexer.peek() {
             Token::LeftBrace => Ok(self.block()?),
-            Token::Write => Ok(self.write_stmt()?),
+            Token::Print => Ok(self.write_stmt()?),
             _ => Ok(self.expr_stmt()?),
         }
     }
@@ -107,9 +108,9 @@ impl Parser {
     }
 
     fn write_stmt(&mut self) -> RASTNode {
-        self.expect(Token::Write)?;
+        self.expect(Token::Print)?;
         self.expect(Token::LeftParen)?;
-        let node = ASTNode::Write(Box::new(self.expression()?));
+        let node = ASTNode::Write(Box::new(self.equality()?));
         self.expect(Token::RightParen)?;
         self.expect(Token::Semicolon)?;
         Ok(node)
@@ -240,6 +241,7 @@ impl Parser {
             Token::Number(x) => Ok(ASTNode::Number(x)),
             Token::Bool(x) => Ok(ASTNode::Bool(x)),
             Token::Str(x) => Ok(ASTNode::Str(x)),
+            Token::Null => Ok(ASTNode::Null),
             Token::LeftParen => {
                 let expr = self.expression()?;
                 self.expect(Token::RightParen)?;

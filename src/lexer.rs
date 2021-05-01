@@ -6,10 +6,11 @@ pub enum Token {
     Identifier(String),
     Bool(bool),
     Str(String),
+    Null,
 
     Let,
     Def,
-    Write,
+    Print,
 
     LeftParen,
     RightParen,
@@ -84,9 +85,10 @@ impl Lexer {
                     match buffer.as_str() {
                         "true" => tokens.push_front(Token::Bool(true)),
                         "false" => tokens.push_front(Token::Bool(false)),
+                        "null" => tokens.push_front(Token::Null),
                         "let" => tokens.push_front(Token::Let),
                         "def" => tokens.push_front(Token::Def),
-                        "write" => tokens.push_front(Token::Write),
+                        "print" => tokens.push_front(Token::Print),
                         _ => tokens.push_front(Token::Identifier(buffer)),
                     }
                 },
