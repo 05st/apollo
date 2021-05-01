@@ -11,6 +11,8 @@ pub enum Token {
     Let,
     Def,
     Print,
+    If,
+    Else,
 
     LeftParen,
     RightParen,
@@ -27,6 +29,8 @@ pub enum Token {
     Lesser,
     GreaterEqual,
     LesserEqual,
+    And,
+    Or,
     
     Plus,
     Dash,
@@ -89,6 +93,8 @@ impl Lexer {
                         "let" => tokens.push_front(Token::Let),
                         "def" => tokens.push_front(Token::Def),
                         "print" => tokens.push_front(Token::Print),
+                        "if" => tokens.push_front(Token::If),
+                        "else" => tokens.push_front(Token::Else),
                         _ => tokens.push_front(Token::Identifier(buffer)),
                     }
                 },
@@ -143,6 +149,14 @@ impl Lexer {
                         Token::Lesser
                     }
                 ),
+                '&' if *iter.peek().unwrap_or(&'\0') == '&' => {
+                    iter.next();
+                    tokens.push_front(Token::And)
+                },
+                '|' if *iter.peek().unwrap_or(&'\0') == '|' => {
+                    iter.next();
+                    tokens.push_front(Token::Or)
+                },
                 '+' => tokens.push_front(Token::Plus),
                 '-' => tokens.push_front(Token::Dash),
                 '*' => tokens.push_front(Token::Asterisk),

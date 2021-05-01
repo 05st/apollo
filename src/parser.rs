@@ -16,6 +16,9 @@ pub enum Operator {
     GreaterEqual,
     Lesser,
     LesserEqual,
+
+    LogicOr,
+    LogicAnd,
 }
 
 #[derive(Debug, Clone)]
@@ -26,8 +29,9 @@ pub enum ASTNode {
     Null,
     Binary(Operator, Box<ASTNode>, Box<ASTNode>),
     Unary(Operator, Box<ASTNode>),
+    If(Box<ASTNode>, Box<ASTNode>, Box<Option<ASTNode>>),
     VarDecl(String, Box<Option<ASTNode>>),
-    Write(Box<ASTNode>),
+    Print(Box<ASTNode>),
     ExprStmt(Box<ASTNode>),
     Variable(String),
     Compound(Vec<ASTNode>),
@@ -90,10 +94,26 @@ impl Parser {
 
     fn statement(&mut self) -> RASTNode {
         match self.lexer.peek() {
-            Token::LeftBrace => Ok(self.block()?),
-            Token::Print => Ok(self.print_stmt()?),
-            _ => Ok(self.expr_stmt()?),
+            Token::LeftBrace => self.block(),
+            Token::Print => self.print_stmt(),
+            Token::If => self.if_stmt(),
+            _ => self.expr_stmt(),
         }
+    }
+
+    fn if_stmt(&mut self) -> RASTNode {
+        self.expect(Token::If)?;
+        self.expect(Token::LeftParen)?;
+        let expr = self.expression()?;
+        self.expect(Token::RightParen)?;
+        let stmt = self.statement()?;
+        let else_stmt = if let Token::Else = self.lexer.peek() {
+            self.lexer.next();
+            Option::Some(self.statement()?)
+        } else {
+            Option::None
+        };
+        Ok(ASTNode::If(Box::new(expr), Box::new(stmt), Box::new(else_stmt)))
     }
 
     fn block(&mut self) -> RASTNode {
@@ -112,7 +132,7 @@ impl Parser {
     fn print_stmt(&mut self) -> RASTNode {
         self.expect(Token::Print)?;
         self.expect(Token::LeftParen)?;
-        let node = ASTNode::Write(Box::new(self.expression()?));
+        let node = ASTNode::Print(Box::new(self.expression()?));
         self.expect(Token::RightParen)?;
         self.expect(Token::Semicolon)?;
         Ok(node)
@@ -129,7 +149,7 @@ impl Parser {
     }
 
     fn assignment(&mut self) -> RASTNode {
-        let expr = self.equality()?;
+        let expr = self.logic_or()?;
 
         if let Token::Equal = self.lexer.peek() {
             self.lexer.next();
@@ -142,6 +162,34 @@ impl Parser {
         } else {
             Ok(expr)
         }
+    }
+
+    fn logic_or(&mut self) -> RASTNode {
+        let mut node = self.logic_and()?;
+        loop {
+            match self.lexer.peek() {
+                Token::Or => {
+                    self.lexer.next();
+                    node = ASTNode::Binary(Operator::LogicOr, Box::new(node), Box::new(self.logic_and()?));
+                },
+                _ => break,
+            }
+        }
+        Ok(node)
+    }
+
+    fn logic_and(&mut self) -> RASTNode {
+        let mut node = self.equality()?;
+        loop {
+            match self.lexer.peek() {
+                Token::And => {
+                    self.lexer.next();
+                    node = ASTNode::Binary(Operator::LogicAnd, Box::new(node), Box::new(self.equality()?));
+                },
+                _ => break,
+            }
+        }
+        Ok(node)       
     }
 
     fn equality(&mut self) -> RASTNode {

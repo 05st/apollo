@@ -6,36 +6,44 @@ use lexer::*;
 use parser::*;
 use interpreter::*;
 
+use std::env;
+use std::fs;
+
 fn main() {
     let mut interpreter = Interpreter::new();
 
-    let code = "
-        let test = 10;
-        let y = 5;
-        {
-            let test = 5;
-            y = 2;
-            print(test - y);
-        }
-        print(test);
-        print(y);
-    ";
-
-    println!("{}", interpreter.interpret(Parser::new(Lexer::new(code.to_string())).parse().unwrap()));
-
-    loop {
-        let mut input = String::new();
-        std::io::stdin().read_line(&mut input).unwrap();
-
+    let args: Vec<String> = env::args().collect();
+    if args.len() > 1 {
+        let input = fs::read_to_string(args[1].clone()).expect("Failed to read input file");
         let lexer = Lexer::new(input);
-        // println!("{:?}", lexer.clone());
         let mut parser = Parser::new(lexer);
         match parser.parse() {
             Ok(root) => {
-                // println!("{:?}", root);
-                println!("{}", interpreter.interpret(root));
+                let res = interpreter.interpret(root);
+                if res != String::new() {
+                    println!("{}", res);
+                }
             },
             Err(m) => println!("{}", m),
+        }
+    } else {
+        loop {
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input).unwrap();
+
+            let lexer = Lexer::new(input);
+            // println!("{:?}", lexer.clone());
+            let mut parser = Parser::new(lexer);
+            match parser.parse() {
+                Ok(root) => {
+                    // println!("{:?}", root);
+                    let res = interpreter.interpret(root);
+                    if res != String::new() {
+                        println!("{}", res);
+                    }
+                },
+                Err(m) => println!("{}", m),
+            }
         }
     }
 }

@@ -25,7 +25,7 @@ impl Environment {
         }
     }
 
-    fn new_child(parent: Environment) -> Environment {
+    fn as_child(parent: Environment) -> Environment {
         Environment {
             parent: Option::Some(Box::new(parent)),
             values: HashMap::new(),
@@ -70,6 +70,29 @@ pub struct Interpreter {
     environment: Environment,
 }
 
+fn number_op(op: Operator, a: Value, b: Value, f: Box<dyn Fn(f64, f64) -> f64>) -> RValue {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => Ok(Value::Number(f(x, y))),
+        _ => Err(format!("Invalid types for {:?} operator, expected Numbers", op)),
+    }
+}
+
+fn bool_op(op: Operator, a: Value, b: Value, f: Box<dyn Fn(f64, f64) -> bool>) -> RValue {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => Ok(Value::Bool(f(x, y))),
+        _ => Err(format!("Invalid types for {:?} operator, expected Numbers", op)),
+    }
+}
+
+fn is_truthy(v: &Value) -> bool {
+    match v {
+        Value::Number(x) => (x > &0f64),
+        Value::Bool(x) => (x == &true),
+        Value::Str(_) => true,
+        Value::Null => false,
+    }
+}
+
 impl Interpreter {
     fn expression(&mut self, node: ASTNode) -> RValue {
         match node {
@@ -87,61 +110,30 @@ impl Interpreter {
                             _ => Err(String::from("Invalid types for Add operator")),
                         }
                     },
-                    Operator::Subtract => {
-                        match (eleft, eright) {
-                            (Value::Number(x), Value::Number(y)) => Ok(Value::Number(x - y)),
-                            _ => Err(String::from("Invalid types for Subtract operator")),
-                        }
-                    },
-                    Operator::Multiply => {
-                        match (eleft, eright) {
-                            (Value::Number(x), Value::Number(y)) => Ok(Value::Number(x * y)),
-                            _ => Err(String::from("Invalid types for Multiply operator")),
-                        }
-                    },
-                    Operator::Divide => {
-                        match (eleft, eright) {
-                            (Value::Number(x), Value::Number(y)) => Ok(Value::Number(x / y)),
-                            _ => Err(String::from("Invalid types for Divide operator")),
-                        }
-                    },
-                    Operator::Modulo => {
-                        match (eleft, eright) {
-                            (Value::Number(x), Value::Number(y)) => Ok(Value::Number(x % y)),
-                            _ => Err(String::from("Invalid types for Modulo operator")),
-                        }
-                    },
-                    Operator::Exponent => {
-                        match (eleft, eright) {
-                            (Value::Number(x), Value::Number(y)) => Ok(Value::Number(x.powf(y))),
-                            _ => Err(String::from("Invalid types for Exponent operator")),
-                        }
-                    },
+                    Operator::Subtract => number_op(op, eleft, eright, Box::new(|a, b| a - b)),
+                    Operator::Multiply => number_op(op, eleft, eright, Box::new(|a, b| a * b)),
+                    Operator::Divide => number_op(op, eleft, eright, Box::new(|a, b| a / b)),
+                    Operator::Modulo => number_op(op, eleft, eright, Box::new(|a, b| a % b)),
+                    Operator::Exponent => number_op(op, eleft, eright, Box::new(|a, b| a.powf(b))),
                     Operator::Equal => Ok(Value::Bool(eleft == eright)),
                     Operator::NotEqual => Ok(Value::Bool(eleft != eright)),
-                    Operator::Greater => {
-                        match (eleft, eright) {
-                            (Value::Number(x), Value::Number(y)) => Ok(Value::Bool(x > y)),
-                            _ => Err(String::from("Invalid types for Greater operator")),
-                        }                       
+                    Operator::Greater => bool_op(op, eleft, eright, Box::new(|a, b| a > b)),
+                    Operator::GreaterEqual => bool_op(op, eleft, eright, Box::new(|a, b| a >= b)),
+                    Operator::Lesser => bool_op(op, eleft, eright, Box::new(|a, b| a < b)),
+                    Operator::LesserEqual => bool_op(op, eleft, eright, Box::new(|a, b| a <= b)),
+                    Operator::LogicOr => {
+                        if is_truthy(&eleft) {
+                            Ok(eleft)
+                        } else {
+                            Ok(eright)
+                        }
                     },
-                    Operator::GreaterEqual => {
-                        match (eleft, eright) {
-                            (Value::Number(x), Value::Number(y)) => Ok(Value::Bool(x >= y)),
-                            _ => Err(String::from("Invalid types for GreaterEqual operator")),
-                        }                       
-                    },
-                    Operator::Lesser => {
-                        match (eleft, eright) {
-                            (Value::Number(x), Value::Number(y)) => Ok(Value::Bool(x < y)),
-                            _ => Err(String::from("Invalid types for Lesser operator")),
-                        }                       
-                    },
-                    Operator::LesserEqual => {
-                        match (eleft, eright) {
-                            (Value::Number(x), Value::Number(y)) => Ok(Value::Bool(x <= y)),
-                            _ => Err(String::from("Invalid types for LesserEqual operator")),
-                        }                       
+                    Operator::LogicAnd => {
+                        if !is_truthy(&eleft) {
+                            Ok(eleft)
+                        } else {
+                            Ok(eright)
+                        }
                     },
                     _ => Err(format!("Invalid binary operator {:?}", op)),
                 }
@@ -155,12 +147,7 @@ impl Interpreter {
                             _ => Err(String::from("Invalid type for Negation operator")),
                         }
                     },
-                    Operator::Not => {
-                        match eval {
-                            Value::Bool(x) => Ok(Value::Bool(!x)),
-                            _ => Err(String::from("Invalid type for Not operator")),
-                        }
-                    },
+                    Operator::Not => Ok(Value::Bool(!is_truthy(&eval))),
                     _ => Err(format!("Invalid unary operator {:?}", op)),
                 }
             },
@@ -184,8 +171,7 @@ impl Interpreter {
                 }
             },
             ASTNode::Block(decls) => {
-                let prev = self.environment.clone();
-                self.environment = Environment::new_child(prev); 
+                self.environment = Environment::as_child(self.environment.clone()); 
                 for decl in decls {
                     let err = self.statement(decl);
                     if err != String::new() {
@@ -193,6 +179,17 @@ impl Interpreter {
                     }
                 }
                 self.environment = *self.environment.parent.clone().unwrap();
+            },
+            ASTNode::If(cond, stmt1, stmt2) => {
+                let econd = match self.expression(*cond) {
+                    Ok(x) => x,
+                    Err(m) => return m,
+                };
+                if is_truthy(&econd) {
+                    self.statement(*stmt1);
+                } else if let Some(s) = *stmt2 {
+                    self.statement(s);
+                }
             },
             ASTNode::VarDecl(id, val) => {
                 let eval = match *val {
@@ -212,7 +209,7 @@ impl Interpreter {
                     Err(m) => return m,
                 }
             }
-            ASTNode::Write(expr) => {
+            ASTNode::Print(expr) => {
                 let eval = match self.expression(*expr) {
                     Ok(x) => x,
                     Err(m) => return m,
