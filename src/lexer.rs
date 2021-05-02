@@ -149,7 +149,20 @@ impl Lexer {
                 '+' => tokens.push_front(double_match(peek, '=', Token::PlusEqual, Token::Plus)),
                 '-' => tokens.push_front(double_match(peek, '=', Token::DashEqual, Token::Dash)),
                 '*' => tokens.push_front(double_match(peek, '=', Token::AsteriskEqual, Token::Asterisk)),
-                '/' => tokens.push_front(double_match(peek, '=', Token::SlashEqual, Token::Slash)),
+                '/' => {
+                    if peek == '/' {
+                        while let Some(d) = iter.next() {
+                            if d == '\n' {
+                                break
+                            }
+                        }
+                    } else if peek == '=' {
+                        iter.next();
+                        tokens.push_front(Token::SlashEqual);
+                    } else {
+                        tokens.push_front(Token::Slash);
+                    }
+                },
                 '%' => tokens.push_front(double_match(peek, '=', Token::PercentEqual, Token::Percent)),
                 '^' => tokens.push_front(double_match(peek, '=', Token::CaretEqual, Token::Caret)),
                 '&' if *iter.peek().unwrap_or(&'\0') == '&' => {
