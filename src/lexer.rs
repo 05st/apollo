@@ -26,6 +26,13 @@ pub enum Token {
     RightBracket,
     
     Equal,
+    PlusEqual,
+    DashEqual,
+    AsteriskEqual,
+    SlashEqual,
+    PercentEqual,
+    CaretEqual,
+
     EqualEqual,
     Not,
     NotEqual,
@@ -67,7 +74,18 @@ impl Lexer {
         let mut tokens = VecDeque::new();
         let mut iter = input.trim().chars().peekable();
 
+
         while let Some(c) = iter.next() {
+            let peek = *iter.peek().unwrap_or(&'\0');
+            let mut double_match = |a, b, x, y| {
+                if a == b {
+                    iter.next();
+                    x
+                } else {
+                    y
+                }
+            };
+
             match c {
                 '0'..='9' => {
                     let mut buffer = String::new();
@@ -124,38 +142,16 @@ impl Lexer {
                 '}' => tokens.push_front(Token::RightBrace),
                 '[' => tokens.push_front(Token::LeftBracket),
                 ']' => tokens.push_front(Token::RightBracket),
-                '=' => tokens.push_front(
-                    if *iter.peek().unwrap_or(&'\0') == '=' {
-                        iter.next();
-                        Token::EqualEqual
-                    } else {
-                        Token::Equal
-                    }
-                ),
-                '!' => tokens.push_front(
-                    if *iter.peek().unwrap_or(&'\0') == '=' {
-                        iter.next();
-                        Token::NotEqual
-                    } else {
-                        Token::Not
-                    }
-                ),
-                '>' => tokens.push_front(
-                    if *iter.peek().unwrap_or(&'\0') == '=' {
-                        iter.next();
-                        Token::GreaterEqual
-                    } else {
-                        Token::Greater
-                    }
-                ),
-                '<' => tokens.push_front(
-                    if *iter.peek().unwrap_or(&'\0') == '=' {
-                        iter.next();
-                        Token::LesserEqual
-                    } else {
-                        Token::Lesser
-                    }
-                ),
+                '=' => tokens.push_front(double_match(peek, '=', Token::EqualEqual, Token::Equal)),
+                '!' => tokens.push_front(double_match(peek, '=', Token::NotEqual, Token::Not)),
+                '>' => tokens.push_front(double_match(peek, '=', Token::GreaterEqual, Token::Greater)),
+                '<' => tokens.push_front(double_match(peek, '=', Token::LesserEqual, Token::Lesser)),
+                '+' => tokens.push_front(double_match(peek, '=', Token::PlusEqual, Token::Plus)),
+                '-' => tokens.push_front(double_match(peek, '=', Token::DashEqual, Token::Dash)),
+                '*' => tokens.push_front(double_match(peek, '=', Token::AsteriskEqual, Token::Asterisk)),
+                '/' => tokens.push_front(double_match(peek, '=', Token::SlashEqual, Token::Slash)),
+                '%' => tokens.push_front(double_match(peek, '=', Token::PercentEqual, Token::Percent)),
+                '^' => tokens.push_front(double_match(peek, '=', Token::CaretEqual, Token::Caret)),
                 '&' if *iter.peek().unwrap_or(&'\0') == '&' => {
                     iter.next();
                     tokens.push_front(Token::And)
@@ -164,12 +160,6 @@ impl Lexer {
                     iter.next();
                     tokens.push_front(Token::Or)
                 },
-                '+' => tokens.push_front(Token::Plus),
-                '-' => tokens.push_front(Token::Dash),
-                '*' => tokens.push_front(Token::Asterisk),
-                '/' => tokens.push_front(Token::Slash),
-                '%' => tokens.push_front(Token::Percent),
-                '^' => tokens.push_front(Token::Caret),
                 '.' => tokens.push_front(Token::Dot),
                 ';' => tokens.push_front(Token::Semicolon),
                 _ => (),

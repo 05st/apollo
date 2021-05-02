@@ -206,16 +206,26 @@ impl Parser {
     fn assignment(&mut self) -> RASTNode {
         let expr = self.logic_or()?;
 
-        if let Token::Equal = self.lexer.peek() {
-            self.lexer.next();
-            let value = self.assignment()?;
-            if let ASTNode::Variable(id) = expr {
-                Ok(ASTNode::Assign(id, Box::new(value)))
-            } else {
-                Err(String::from("Invalid assignment target"))
-            }
-        } else {
-            Ok(expr)
+        match self.lexer.peek() {
+            Token::Equal | Token::PlusEqual | Token::DashEqual | Token::AsteriskEqual | Token::SlashEqual | Token::PercentEqual | Token::CaretEqual => {
+                if let ASTNode::Variable(id) = expr.clone() {
+                    let oper = self.lexer.next();
+                    let mut value = self.assignment()?;
+                    match oper {
+                        Token::PlusEqual => value = ASTNode::Binary(Operator::Add, Box::new(expr), Box::new(value)),
+                        Token::DashEqual => value = ASTNode::Binary(Operator::Subtract, Box::new(expr), Box::new(value)),
+                        Token::AsteriskEqual => value = ASTNode::Binary(Operator::Multiply, Box::new(expr), Box::new(value)),
+                        Token::SlashEqual => value = ASTNode::Binary(Operator::Divide, Box::new(expr), Box::new(value)),
+                        Token::PercentEqual => value = ASTNode::Binary(Operator::Modulo, Box::new(expr), Box::new(value)),
+                        Token::CaretEqual => value = ASTNode::Binary(Operator::Exponent, Box::new(expr), Box::new(value)),
+                        _ => (),
+                    };
+                    Ok(ASTNode::Assign(id, Box::new(value)))
+                } else {
+                    Err(format!("Invalid assignment target {:?}", expr))
+                }
+            },
+            _ => Ok(expr),
         }
     }
 
