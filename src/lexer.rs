@@ -13,6 +13,8 @@ pub enum Token {
     Print,
     If,
     Else,
+    While,
+    For,
 
     LeftParen,
     RightParen,
@@ -95,6 +97,8 @@ impl Lexer {
                         "print" => tokens.push_front(Token::Print),
                         "if" => tokens.push_front(Token::If),
                         "else" => tokens.push_front(Token::Else),
+                        "while" => tokens.push_front(Token::While),
+                        "for" => tokens.push_front(Token::For),
                         _ => tokens.push_front(Token::Identifier(buffer)),
                     }
                 },

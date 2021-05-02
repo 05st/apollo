@@ -30,6 +30,7 @@ pub enum ASTNode {
     Binary(Operator, Box<ASTNode>, Box<ASTNode>),
     Unary(Operator, Box<ASTNode>),
     If(Box<ASTNode>, Box<ASTNode>, Box<Option<ASTNode>>),
+    While(Box<ASTNode>, Box<ASTNode>),
     VarDecl(String, Box<Option<ASTNode>>),
     Print(Box<ASTNode>),
     ExprStmt(Box<ASTNode>),
@@ -97,6 +98,8 @@ impl Parser {
             Token::LeftBrace => self.block(),
             Token::Print => self.print_stmt(),
             Token::If => self.if_stmt(),
+            Token::While => self.while_stmt(),
+            Token::For => self.for_stmt(),
             _ => self.expr_stmt(),
         }
     }
@@ -114,6 +117,46 @@ impl Parser {
             Option::None
         };
         Ok(ASTNode::If(Box::new(expr), Box::new(stmt), Box::new(else_stmt)))
+    }
+
+    fn while_stmt(&mut self) -> RASTNode {
+        self.expect(Token::While)?;
+        self.expect(Token::LeftParen)?;
+        let expr = self.expression()?;
+        self.expect(Token::RightParen)?;
+        Ok(ASTNode::While(Box::new(expr), Box::new(self.statement()?)))
+    }
+
+    fn for_stmt(&mut self) -> RASTNode {
+        self.expect(Token::For)?;
+        self.expect(Token::LeftParen)?;
+        let init = match self.lexer.peek() {
+            Token::Let => Option::Some(self.var_decl()?),
+            Token::Semicolon => {
+                self.lexer.next();
+                Option::None
+            },
+            _ => Option::Some(self.expr_stmt()?),
+        };
+        let cond = match self.lexer.peek() {
+            Token::Semicolon => ASTNode::Bool(true),
+            _ => self.expression()?,
+        };
+        self.expect(Token::Semicolon)?;
+        let incr = match self.lexer.peek() {
+            Token::RightParen => Option::None,
+            _ => Option::Some(self.expression()?),
+        };
+        self.expect(Token::RightParen)?;
+        let mut res = self.statement()?;
+        if let Option::Some(incr) = incr {
+            res = ASTNode::Block(vec![res, ASTNode::ExprStmt(Box::new(incr))]);
+        }
+        res = ASTNode::While(Box::new(cond), Box::new(res));
+        if let Option::Some(init) = init {
+            res = ASTNode::Block(vec![init, res]);
+        }
+        Ok(res)
     }
 
     fn block(&mut self) -> RASTNode {

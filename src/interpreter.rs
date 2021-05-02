@@ -191,6 +191,14 @@ impl Interpreter {
                     self.statement(s);
                 }
             },
+            ASTNode::While(cond, stmt) => {
+                while is_truthy(&match self.expression(*cond.clone()) {
+                    Ok(x) => x,
+                    Err(m) => return m,
+                }) {
+                    self.statement(*stmt.clone());
+                }
+            },
             ASTNode::VarDecl(id, val) => {
                 let eval = match *val {
                     Some(expr) => {
