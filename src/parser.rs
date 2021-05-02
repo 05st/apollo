@@ -31,6 +31,8 @@ pub enum ASTNode {
     Unary(Operator, Box<ASTNode>),
     If(Box<ASTNode>, Box<ASTNode>, Box<Option<ASTNode>>),
     While(Box<ASTNode>, Box<ASTNode>),
+    Break,
+    Continue,
     VarDecl(String, Box<Option<ASTNode>>),
     Print(Box<ASTNode>),
     ExprStmt(Box<ASTNode>),
@@ -100,6 +102,16 @@ impl Parser {
             Token::If => self.if_stmt(),
             Token::While => self.while_stmt(),
             Token::For => self.for_stmt(),
+            Token::Break => {
+                self.lexer.next();
+                self.expect(Token::Semicolon)?;
+                Ok(ASTNode::Break)
+            },
+            Token::Continue => {
+                self.lexer.next();
+                self.expect(Token::Semicolon)?;
+                Ok(ASTNode::Continue)
+            },
             _ => self.expr_stmt(),
         }
     }

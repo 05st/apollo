@@ -18,12 +18,7 @@ fn main() {
         let lexer = Lexer::new(input);
         let mut parser = Parser::new(lexer);
         match parser.parse() {
-            Ok(root) => {
-                let res = interpreter.interpret(root);
-                if res != String::new() {
-                    println!("{}", res);
-                }
-            },
+            Ok(root) => interpreter.interpret(root),
             Err(m) => println!("{}", m),
         }
     } else {
@@ -32,16 +27,9 @@ fn main() {
             std::io::stdin().read_line(&mut input).unwrap();
 
             let lexer = Lexer::new(input);
-            // println!("{:?}", lexer.clone());
             let mut parser = Parser::new(lexer);
             match parser.parse() {
-                Ok(root) => {
-                    // println!("{:?}", root);
-                    let res = interpreter.interpret(root);
-                    if res != String::new() {
-                        println!("{}", res);
-                    }
-                },
+                Ok(root) => interpreter.interpret(root),
                 Err(m) => println!("{}", m),
             }
         }

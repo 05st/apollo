@@ -15,6 +15,8 @@ pub enum Token {
     Else,
     While,
     For,
+    Break,
+    Continue,
 
     LeftParen,
     RightParen,
@@ -48,7 +50,6 @@ pub enum Token {
     EOF,
 }
 
-#[derive(Clone, Debug)]
 pub struct Lexer {
     tokens: VecDeque<Token>
 }
@@ -99,6 +100,8 @@ impl Lexer {
                         "else" => tokens.push_front(Token::Else),
                         "while" => tokens.push_front(Token::While),
                         "for" => tokens.push_front(Token::For),
+                        "break" => tokens.push_front(Token::Break),
+                        "continue" => tokens.push_front(Token::Continue),
                         _ => tokens.push_front(Token::Identifier(buffer)),
                     }
                 },
