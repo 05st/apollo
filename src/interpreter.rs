@@ -1,12 +1,21 @@
 use crate::parser::*;
 use std::collections::HashMap;
 
+use std::time::SystemTime;
+use std::time::UNIX_EPOCH;
+
 #[derive(Clone, PartialEq)]
-pub enum Value {
+enum FunctionType {
+    User(ASTNode),
+    BuiltIn(fn(Vec<Value>) -> RValue),
+}
+
+#[derive(Clone, PartialEq)]
+enum Value {
     Number(f64),
     Bool(bool),
     Str(String),
-    Function(Vec<String>, ASTNode),
+    Function(Vec<String>, FunctionType),
     Null,
 }
 
@@ -30,14 +39,14 @@ pub struct Interpreter {
     environment: Environment,
 }
 
-fn number_op(op: Operator, a: Value, b: Value, f: Box<dyn Fn(f64, f64) -> f64>) -> RValue {
+fn number_op(op: Operator, a: Value, b: Value, f: fn(f64, f64) -> f64) -> RValue {
     match (a, b) {
         (Value::Number(x), Value::Number(y)) => Ok(Value::Number(f(x, y))),
         _ => Err(format!("Invalid types for {:?} operator, expected Numbers", op)),
     }
 }
 
-fn bool_op(op: Operator, a: Value, b: Value, f: Box<dyn Fn(f64, f64) -> bool>) -> RValue {
+fn bool_op(op: Operator, a: Value, b: Value, f: fn(f64, f64) -> bool) -> RValue {
     match (a, b) {
         (Value::Number(x), Value::Number(y)) => Ok(Value::Bool(f(x, y))),
         _ => Err(format!("Invalid types for {:?} operator, expected Numbers", op)),
@@ -100,19 +109,30 @@ impl Interpreter {
     fn expression(&mut self, node: ASTNode) -> RValue {
         match node {
             ASTNode::Call(id, mut args) => {
-                if let Value::Function(mut params, stmt) = self.environment.get(&id)? {
+                if let Value::Function(mut params, ftype) = self.environment.get(&id)? {
                     if args.len() == params.len() {
-                        let prev_env = self.environment.clone();
-                        let mut env = Environment::as_child(self.environment.clone());
-                        for _ in 0..args.len() {
-                            env.define(params.remove(0), self.expression(args.remove(0))?);
-                        }
-                        self.environment = env;
-                        let msg = self.statement(stmt)?;
-                        self.environment = prev_env;
-                        match msg {
-                            Message::Return(v) => Ok(v),
-                            _ => Ok(Value::Null)
+                        match ftype {
+                            FunctionType::User(stmt) => {
+                                let prev_env = self.environment.clone();
+                                let mut env = Environment::as_child(self.environment.clone());
+                                for _ in 0..args.len() {
+                                    env.define(params.remove(0), self.expression(args.remove(0))?);
+                                }
+                                self.environment = env;
+                                let msg = self.statement(stmt)?;
+                                self.environment = prev_env;
+                                match msg {
+                                    Message::Return(v) => Ok(v),
+                                    _ => Ok(Value::Null)
+                                }
+                            },
+                            FunctionType::BuiltIn(f) => {
+                                let mut eval_args = Vec::new();
+                                for _ in 0..args.len() {
+                                    eval_args.push(self.expression(args.remove(0))?);
+                                }
+                                Ok(f(eval_args)?)
+                            },
                         }
                     } else {
                         Err(format!("Invalid number of arguments when calling {}", id))
@@ -135,17 +155,17 @@ impl Interpreter {
                             _ => Err(String::from("Invalid types for Add operator")),
                         }
                     },
-                    Operator::Subtract => number_op(op, eleft, eright, Box::new(|a, b| a - b)),
-                    Operator::Multiply => number_op(op, eleft, eright, Box::new(|a, b| a * b)),
-                    Operator::Divide => number_op(op, eleft, eright, Box::new(|a, b| a / b)),
-                    Operator::Modulo => number_op(op, eleft, eright, Box::new(|a, b| a % b)),
-                    Operator::Exponent => number_op(op, eleft, eright, Box::new(|a, b| a.powf(b))),
+                    Operator::Subtract => number_op(op, eleft, eright, |a, b| a - b),
+                    Operator::Multiply => number_op(op, eleft, eright, |a, b| a * b),
+                    Operator::Divide => number_op(op, eleft, eright, |a, b| a / b),
+                    Operator::Modulo => number_op(op, eleft, eright, |a, b| a % b),
+                    Operator::Exponent => number_op(op, eleft, eright, |a, b| a.powf(b)),
                     Operator::Equal => Ok(Value::Bool(eleft == eright)),
                     Operator::NotEqual => Ok(Value::Bool(eleft != eright)),
-                    Operator::Greater => bool_op(op, eleft, eright, Box::new(|a, b| a > b)),
-                    Operator::GreaterEqual => bool_op(op, eleft, eright, Box::new(|a, b| a >= b)),
-                    Operator::Lesser => bool_op(op, eleft, eright, Box::new(|a, b| a < b)),
-                    Operator::LesserEqual => bool_op(op, eleft, eright, Box::new(|a, b| a <= b)),
+                    Operator::Greater => bool_op(op, eleft, eright, |a, b| a > b),
+                    Operator::GreaterEqual => bool_op(op, eleft, eright, |a, b| a >= b),
+                    Operator::Lesser => bool_op(op, eleft, eright, |a, b| a < b),
+                    Operator::LesserEqual => bool_op(op, eleft, eright, |a, b| a <= b),
                     Operator::LogicOr => {
                         if is_truthy(&eleft) {
                             Ok(eleft)
@@ -233,7 +253,7 @@ impl Interpreter {
                 Ok(Message::None)
             },
             ASTNode::Function(id, params, block) => {
-                self.environment.define(id, Value::Function(params, *block));
+                self.environment.define(id, Value::Function(params, FunctionType::User(*block)));
                 Ok(Message::None)
             },
             ASTNode::ExprStmt(expr) => {
@@ -266,7 +286,21 @@ impl Interpreter {
 
     pub fn new() -> Interpreter {
         let mut env = Environment::new();
-        env.define("test".to_string(), Value::Function(vec!["out".to_string()], ASTNode::Print(Box::new(ASTNode::Variable("out".to_string())))));
+        env.define("time".to_string(), Value::Function(vec![], FunctionType::BuiltIn(
+            |_args| Ok(Value::Number(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64()))
+        )));
+        env.define("floor".to_string(), Value::Function(vec!["x".to_string()], FunctionType::BuiltIn(
+            |args| match &args[0] {
+                Value::Number(x) => Ok(Value::Number(x.floor())),
+                _ => Err("Invalid type for floor function".to_string()),
+            }
+        )));
+        env.define("ceil".to_string(), Value::Function(vec!["x".to_string()], FunctionType::BuiltIn(
+            |args| match &args[0] {
+                Value::Number(x) => Ok(Value::Number(x.ceil())),
+                _ => Err("Invalid type for ceil function".to_string()),
+            }
+        )));
         Interpreter {
             environment: env,
         }
