@@ -279,28 +279,18 @@ impl Parser {
 
     fn logic_or(&mut self) -> RASTNode {
         let mut node = self.logic_and()?;
-        loop {
-            match self.lexer.peek() {
-                Token::Or => {
-                    self.lexer.next();
-                    node = ASTNode::Binary(Operator::LogicOr, Box::new(node), Box::new(self.logic_and()?));
-                },
-                _ => break,
-            }
+        while self.lexer.peek() == Token::Or {
+            self.lexer.next();
+            node = ASTNode::Binary(Operator::LogicOr, Box::new(node), Box::new(self.logic_and()?));
         }
         Ok(node)
     }
 
     fn logic_and(&mut self) -> RASTNode {
         let mut node = self.equality()?;
-        loop {
-            match self.lexer.peek() {
-                Token::And => {
-                    self.lexer.next();
-                    node = ASTNode::Binary(Operator::LogicAnd, Box::new(node), Box::new(self.equality()?));
-                },
-                _ => break,
-            }
+        while self.lexer.peek() == Token::And {
+            self.lexer.next();
+            node = ASTNode::Binary(Operator::LogicAnd, Box::new(node), Box::new(self.equality()?));
         }
         Ok(node)       
     }
