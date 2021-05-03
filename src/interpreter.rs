@@ -110,13 +110,14 @@ impl Interpreter {
             ASTNode::Call(id, mut args) => {
                 if let Value::Function(mut params, stmt) = self.environment.get(&id)? {
                     if args.len() == params.len() {
+                        let prev_env = self.environment.clone();
                         let mut env = Environment::as_child(self.environment.clone());
-                        for i in 0..args.len() {
-                            env.define(params.remove(i), self.expression(args.remove(i))?);
+                        for _ in 0..args.len() {
+                            env.define(params.remove(0), self.expression(args.remove(0))?);
                         }
                         self.environment = env;
                         let msg = self.statement(stmt)?;
-                        self.environment = *self.environment.parent.clone().unwrap();
+                        self.environment = prev_env;
                         match msg {
                             Message::Return(v) => Ok(v),
                             _ => Ok(Value::Null)
