@@ -6,32 +6,42 @@ use lexer::*;
 use parser::*;
 use interpreter::*;
 
-use std::env;
 use std::fs;
+use std::path::PathBuf;
 
-fn main() {
+use structopt::StructOpt;
+use atty::Stream;
+use std::io::BufRead;
+use std::io;
+
+#[derive(StructOpt, Debug)]
+struct Application {
+    #[structopt(short = "v", long = "verbose")]
+    verbose: bool,
+    #[structopt(short = "p", long = "pretend")]
+    pretend: bool,
+    #[structopt(short = "f", long = "source")]
+    source: Option<PathBuf>,
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut interpreter = Interpreter::new();
-
-    let args: Vec<String> = env::args().collect();
-    if args.len() > 1 {
-        let input = fs::read_to_string(args[1].clone()).expect("Failed to read input file");
-        let lexer = Lexer::new(input);
+    let application = Application::from_args();
+    if !atty::is(Stream::Stdin) {
+        let lexer = Lexer::new(io::stdin().lock().lines().next().unwrap()?);
         let mut parser = Parser::new(lexer);
-        match parser.parse() {
-            Ok(root) => interpreter.interpret(root),
-            Err(m) => println!("{}", m),
+        let root = if application.verbose { dbg!{ parser.parse()? } } else { parser.parse()? };
+        if !application.pretend {
+            interpreter.interpret(root);
         }
-    } else {
-        loop {
-            let mut input = String::new();
-            std::io::stdin().read_line(&mut input).unwrap();
-
-            let lexer = Lexer::new(input);
-            let mut parser = Parser::new(lexer);
-            match parser.parse() {
-                Ok(root) => interpreter.interpret(root),
-                Err(m) => println!("{}", m),
-            }
+    } else if let Some(file) = application.source {
+        let source = fs::read_to_string(file)?;
+        let lexer = Lexer::new(source);
+        let mut parser = Parser::new(lexer);
+        let root = if application.verbose { dbg!{ parser.parse()? } } else { parser.parse()? };
+        if !application.pretend {
+            interpreter.interpret(root);
         }
     }
+    Ok(())
 }

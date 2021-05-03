@@ -69,38 +69,30 @@ impl Environment {
         }
     }
 
-    fn get(&self, id: &String) -> RValue {
+    fn get(&self, id: &str) -> RValue {
         if self.values.contains_key(id) {
             Ok(self.values.get(id).unwrap().clone())
+        } else if let Option::Some(p) = &self.parent {
+            p.get(id)
         } else {
-            if let Option::Some(p) = &self.parent {
-                p.get(id)
-            } else {
-                Err(format!("Undefined variable {}", id))
-            }
+            Err(format!("Undefined variable {}", id))
         }
  
    }
 
-    fn set(&mut self, id: &String, val: Value) -> RValue {
+    fn set(&mut self, id: &str, val: Value) -> RValue {
         if self.values.contains_key(id) {
             *self.values.get_mut(id).unwrap() = val.clone();
             Ok(val)
+        } else if let Option::Some(p) = &mut self.parent {
+            p.set(id, val)
         } else {
-            if let Option::Some(p) = &mut self.parent {
-                p.set(id, val)
-            } else{
-                Err(format!("Undeclared variable {}", id))
-            }
+            Err(format!("Undeclared variable {}", id))
         }
     }
 
     fn define(&mut self, id: String, val: Value) {
-        if self.values.contains_key(&id) {
-            self.set(&id, val).unwrap();
-        } else {
-            self.values.insert(id, val.clone());
-        }
+        self.values.insert(id, val);
     }
 }
 
