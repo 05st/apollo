@@ -257,9 +257,10 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, root: ASTNode) {
-        if let Err(m) = self.statement(root) {
-            println!("{}", m);
+    pub fn interpret(&mut self, root: ASTNode) -> Result<(), String> {
+        match self.statement(root) {
+            Ok(_) => Ok(()),
+            Err(msg) => Err(msg),
         }
     }
 
