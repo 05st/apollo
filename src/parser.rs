@@ -1,6 +1,6 @@
 use crate::lexer::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Operator {
     Add,
     Subtract,
@@ -21,7 +21,7 @@ pub enum Operator {
     LogicAnd,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ASTNode {
     Number(f64),
     Bool(bool),
@@ -40,6 +40,9 @@ pub enum ASTNode {
     Compound(Vec<ASTNode>),
     Block(Vec<ASTNode>),
     Assign(String, Box<ASTNode>),
+    Function(String, Vec<String>, Box<ASTNode>),
+    Call(String, Vec<ASTNode>),
+    Return(Box<ASTNode>),
 }
 
 type RASTNode = Result<ASTNode, String>;
@@ -73,6 +76,7 @@ impl Parser {
     fn declaration(&mut self) -> RASTNode {
         match self.lexer.peek() {
             Token::Let => Ok(self.var_decl()?),
+            Token::Def => Ok(self.func_decl()?),
             _ => Ok(self.statement()?),
         }
     }
@@ -95,6 +99,41 @@ impl Parser {
         }
     }
 
+    fn func_decl(&mut self) -> RASTNode {
+        self.expect(Token::Def)?;
+        if let Token::Identifier(id) = self.lexer.next() {
+            self.expect(Token::LeftParen)?;
+            let params = self.params()?;
+            self.expect(Token::RightParen)?;
+            Ok(ASTNode::Function(id, params, Box::new(self.block()?)))
+        } else {
+            Err(String::from("Expected Identifier"))
+        }
+    }
+
+    fn params(&mut self) -> Result<Vec<String>, String> {
+        let mut list = vec![];
+        match self.lexer.peek() {
+            Token::RightParen => (),
+            _ => {
+                if let ASTNode::Variable(id) = self.item()? {
+                    list.push(id);
+                } else {
+                    return Err(String::from("Function parameters should be identifiers"));
+                }
+            }
+        };
+        while let Token::Comma = self.lexer.peek() {
+            self.lexer.next();
+            if let ASTNode::Variable(id) = self.item()? {
+                list.push(id);
+            } else {
+                return Err(String::from("Function parameters should be identifiers"));
+            }
+        }
+        Ok(list)
+    }
+
     fn statement(&mut self) -> RASTNode {
         match self.lexer.peek() {
             Token::LeftBrace => self.block(),
@@ -111,6 +150,15 @@ impl Parser {
                 self.lexer.next();
                 self.expect(Token::Semicolon)?;
                 Ok(ASTNode::Continue)
+            },
+            Token::Return => {
+                self.lexer.next();
+                let expr = match self.lexer.peek() {
+                    Token::Semicolon => ASTNode::Null,
+                    _ => self.expression()?,
+                };
+                self.expect(Token::Semicolon)?;
+                Ok(ASTNode::Return(Box::new(expr)))
             },
             _ => self.expr_stmt(),
         }
@@ -351,7 +399,7 @@ impl Parser {
                 self.lexer.next();
                 ASTNode::Unary(Operator::Subtract, Box::new(self.unary()?))
             },
-            _ => self.item()?,
+            _ => self.call()?,
         };
         if let Token::Caret = self.lexer.peek() {
             self.lexer.next();
@@ -359,6 +407,33 @@ impl Parser {
         } else {
             Ok(node)
         }
+    }
+
+    fn call(&mut self) -> RASTNode {
+        let mut node = self.item()?;
+        if let Token::LeftParen = self.lexer.peek() {
+            self.lexer.next();
+            if let ASTNode::Variable(id) = node {
+                node = ASTNode::Call(id, self.arguments()?)
+            } else {
+                return Err(format!("Invalid function name {:?}", node));
+            }
+            self.expect(Token::RightParen)?;
+        }
+        Ok(node)
+    }
+
+    fn arguments(&mut self) -> Result<Vec<ASTNode>, String> {
+        let mut list = vec![];
+        match self.lexer.peek() {
+            Token::RightParen => (),
+            _ => list.push(self.expression()?),
+        };
+        while let Token::Comma = self.lexer.peek() {
+            self.lexer.next();
+            list.push(self.expression()?);
+        }
+        Ok(list)
     }
 
     fn item(&mut self) -> RASTNode {

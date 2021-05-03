@@ -6,12 +6,14 @@ pub enum Value {
     Number(f64),
     Bool(bool),
     Str(String),
+    Function(Vec<String>, ASTNode),
     Null,
 }
 
 enum Message {
     Break,
     Continue,
+    Return(Value),
     None,
 }
 
@@ -47,6 +49,7 @@ fn is_truthy(v: &Value) -> bool {
         Value::Number(x) => (x > &0f64),
         Value::Bool(x) => (x == &true),
         Value::Str(_) => true,
+        Value::Function(_, _) => true,
         Value::Null => false,
     }
 }
@@ -66,9 +69,9 @@ impl Environment {
         }
     }
 
-    fn get(&self, id: String) -> RValue {
-        if self.values.contains_key(&id) {
-            Ok(self.values.get(&id).unwrap().clone())
+    fn get(&self, id: &String) -> RValue {
+        if self.values.contains_key(id) {
+            Ok(self.values.get(id).unwrap().clone())
         } else {
             if let Option::Some(p) = &self.parent {
                 p.get(id)
@@ -79,9 +82,9 @@ impl Environment {
  
    }
 
-    fn set(&mut self, id: String, val: Value) -> RValue {
-        if self.values.contains_key(&id) {
-            *self.values.get_mut(&id).unwrap() = val.clone();
+    fn set(&mut self, id: &String, val: Value) -> RValue {
+        if self.values.contains_key(id) {
+            *self.values.get_mut(id).unwrap() = val.clone();
             Ok(val)
         } else {
             if let Option::Some(p) = &mut self.parent {
@@ -94,7 +97,7 @@ impl Environment {
 
     fn define(&mut self, id: String, val: Value) {
         if self.values.contains_key(&id) {
-            self.set(id, val).unwrap();
+            self.set(&id, val).unwrap();
         } else {
             self.values.insert(id, val.clone());
         }
@@ -104,9 +107,30 @@ impl Environment {
 impl Interpreter {
     fn expression(&mut self, node: ASTNode) -> RValue {
         match node {
+            ASTNode::Call(id, mut args) => {
+                if let Value::Function(mut params, stmt) = self.environment.get(&id)? {
+                    if args.len() == params.len() {
+                        let mut env = Environment::as_child(self.environment.clone());
+                        for i in 0..args.len() {
+                            env.define(params.remove(i), self.expression(args.remove(i))?);
+                        }
+                        self.environment = env;
+                        let msg = self.statement(stmt)?;
+                        self.environment = *self.environment.parent.clone().unwrap();
+                        match msg {
+                            Message::Return(v) => Ok(v),
+                            _ => Ok(Value::Null)
+                        }
+                    } else {
+                        Err(format!("Invalid number of arguments when calling {}", id))
+                    }
+                } else {
+                    Err(format!("Undefined function {}", id))
+                }
+            },
             ASTNode::Assign(id, val) => {
                 let eval = self.expression(*val)?;
-                self.environment.set(id, eval)
+                self.environment.set(&id, eval)
             },
             ASTNode::Binary(op, left, right) => { // Eventually rewrite
                 let (eleft, eright) = (self.expression(*left)?, self.expression(*right)?);
@@ -159,7 +183,7 @@ impl Interpreter {
                     _ => Err(format!("Invalid unary operator {:?}", op)),
                 }
             },
-            ASTNode::Variable(id) => self.environment.get(id),
+            ASTNode::Variable(id) => self.environment.get(&id),
             ASTNode::Number(x) => Ok(Value::Number(x)),
             ASTNode::Bool(x) => Ok(Value::Bool(x)),
             ASTNode::Str(x) => Ok(Value::Str(x)),
@@ -205,6 +229,7 @@ impl Interpreter {
                         Message::None => (),
                         Message::Break => break,
                         Message::Continue => continue,
+                        Message::Return(v) => return Ok(Message::Return(v)),
                     };
                 }
                 Ok(Message::None)
@@ -212,6 +237,10 @@ impl Interpreter {
             ASTNode::VarDecl(id, expr) => {
                 let eval = self.expression((*expr).unwrap_or(ASTNode::Null))?;
                 self.environment.define(id, eval);
+                Ok(Message::None)
+            },
+            ASTNode::Function(id, params, block) => {
+                self.environment.define(id, Value::Function(params, *block));
                 Ok(Message::None)
             },
             ASTNode::ExprStmt(expr) => {
@@ -223,12 +252,14 @@ impl Interpreter {
                     Value::Number(x) => println!("{}", x),
                     Value::Bool(x) => println!("{}", x),
                     Value::Str(x) => println!("{}", x),
+                    Value::Function(_, _) => println!("function"),
                     Value::Null => println!("null"),
                 };
                 Ok(Message::None)
             },
             ASTNode::Break => Ok(Message::Break),
             ASTNode::Continue => Ok(Message::Continue),
+            ASTNode::Return(expr) => Ok(Message::Return(self.expression(*expr)?)),
             _ => Err(format!("Invalid statement {:?}", node)),
         }
     }
@@ -240,8 +271,10 @@ impl Interpreter {
     }
 
     pub fn new() -> Interpreter {
+        let mut env = Environment::new();
+        env.define("test".to_string(), Value::Function(vec!["out".to_string()], ASTNode::Print(Box::new(ASTNode::Variable("out".to_string())))));
         Interpreter {
-            environment: Environment::new(),
+            environment: env,
         }
     }
 }

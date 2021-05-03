@@ -17,6 +17,7 @@ pub enum Token {
     For,
     Break,
     Continue,
+    Return,
 
     LeftParen,
     RightParen,
@@ -52,6 +53,7 @@ pub enum Token {
     
     Dot,
     Semicolon,
+    Comma,
 
     UNDEFINED,
     EOF,
@@ -74,7 +76,6 @@ impl Lexer {
         let mut tokens = VecDeque::new();
         let mut iter = input.trim().chars().peekable();
 
-
         while let Some(c) = iter.next() {
             let peek = *iter.peek().unwrap_or(&'\0');
             let mut double_match = |a, b, x, y| {
@@ -88,8 +89,7 @@ impl Lexer {
 
             match c {
                 '0'..='9' => {
-                    let mut buffer = String::new();
-                    buffer += &c.to_string();
+                    let mut buffer = c.to_string();
                     while let Some(d) = iter.peek() {
                         match d {
                             '0'..='9' | '.' => buffer += &iter.next().unwrap().to_string(),
@@ -99,8 +99,7 @@ impl Lexer {
                     tokens.push_front(Token::Number(buffer.parse::<f64>().expect("Failed to parse to f64")));
                 },
                 'a'..='z' | 'A'..='Z' | '_' => {
-                    let mut buffer = String::new();
-                    buffer += &c.to_string();
+                    let mut buffer = c.to_string();
                     while let Some(d) = iter.peek() {
                         match d {
                             'a'..='z' | 'A'..='Z' | '0'..='9' | '_' => buffer += &iter.next().unwrap().to_string(),
@@ -120,6 +119,7 @@ impl Lexer {
                         "for" => tokens.push_front(Token::For),
                         "break" => tokens.push_front(Token::Break),
                         "continue" => tokens.push_front(Token::Continue),
+                        "return" => tokens.push_front(Token::Return),
                         _ => tokens.push_front(Token::Identifier(buffer)),
                     }
                 },
@@ -175,6 +175,7 @@ impl Lexer {
                 },
                 '.' => tokens.push_front(Token::Dot),
                 ';' => tokens.push_front(Token::Semicolon),
+                ',' => tokens.push_front(Token::Comma),
                 _ => (),
             }
         }
