@@ -4,6 +4,8 @@ use std::collections::HashMap;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
+use std::io;
+
 #[derive(Clone, PartialEq)]
 enum FunctionType {
     User(ASTNode),
@@ -266,16 +268,6 @@ impl Interpreter {
                 self.expression(*expr)?;
                 Ok(Message::None)
             },
-            ASTNode::Print(expr) => {
-                match self.expression(*expr)? {
-                    Value::Number(x) => println!("{}", x),
-                    Value::Bool(x) => println!("{}", x),
-                    Value::Str(x) => println!("{}", x),
-                    Value::Function(_, _) => println!("function"),
-                    Value::Null => println!("null"),
-                };
-                Ok(Message::None)
-            },
             ASTNode::Break => Ok(Message::Break),
             ASTNode::Continue => Ok(Message::Continue),
             ASTNode::Return(expr) => Ok(Message::Return(self.expression(*expr)?)),
@@ -292,6 +284,27 @@ impl Interpreter {
 
     pub fn new() -> Interpreter {
         let mut env = Environment::new();
+        env.define("print".to_string(), Value::Function(vec!["x".to_string()], FunctionType::BuiltIn(
+            |args| {
+                match &args[0] {
+                    Value::Number(x) => println!("{}", x),
+                    Value::Bool(x) => println!("{}", x),
+                    Value::Str(x) => println!("{}", x),
+                    Value::Function(_, _) => println!("function"),
+                    Value::Null => println!("null"),               
+                };
+                Ok(Value::Null)
+            }
+        )));
+        env.define("input".to_string(), Value::Function(vec![], FunctionType::BuiltIn(
+            |_args| {
+                let mut input = String::new();
+                match io::stdin().read_line(&mut input) {
+                    Ok(_) => Ok(Value::Str(input.trim().to_string())),
+                    Err(_) => Err("Failed to get input".to_string()),
+                }
+            }
+        )));
         env.define("time".to_string(), Value::Function(vec![], FunctionType::BuiltIn(
             |_args| Ok(Value::Number(SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs_f64()))
         )));
@@ -307,6 +320,16 @@ impl Interpreter {
                 _ => Err("Invalid type for ceil function".to_string()),
             }
         )));
+        env.define("number".to_string(), Value::Function(vec!["x".to_string()], FunctionType::BuiltIn(
+            |args| match &args[0] {
+                Value::Number(x) => Ok(Value::Number(*x)),
+                Value::Str(x) => match x.parse::<f64>() {
+                    Ok(v) => Ok(Value::Number(v)),
+                    Err(_) => Err("Invalid value for number function".to_string()),
+                },
+                _ => Err("Invalid type for number function".to_string()),
+            }
+        )));       
         Interpreter {
             environment: env,
         }

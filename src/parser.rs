@@ -34,7 +34,6 @@ pub enum ASTNode {
     Break,
     Continue,
     VarDecl(String, Box<Option<ASTNode>>),
-    Print(Box<ASTNode>),
     ExprStmt(Box<ASTNode>),
     Variable(String),
     Compound(Vec<ASTNode>),
@@ -137,7 +136,6 @@ impl Parser {
     fn statement(&mut self) -> RASTNode {
         match self.lexer.peek() {
             Token::LeftBrace => self.block(),
-            Token::Print => self.print_stmt(),
             Token::If => self.if_stmt(),
             Token::While => self.while_stmt(),
             Token::For => self.for_stmt(),
@@ -230,15 +228,6 @@ impl Parser {
         }
         self.expect(Token::RightBrace)?;
         Ok(ASTNode::Block(declarations))
-    }
-
-    fn print_stmt(&mut self) -> RASTNode {
-        self.expect(Token::Print)?;
-        self.expect(Token::LeftParen)?;
-        let node = ASTNode::Print(Box::new(self.expression()?));
-        self.expect(Token::RightParen)?;
-        self.expect(Token::Semicolon)?;
-        Ok(node)
     }
 
     fn expr_stmt(&mut self) -> RASTNode {

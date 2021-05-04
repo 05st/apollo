@@ -10,7 +10,6 @@ pub enum Token {
 
     Let,
     Def,
-    Print,
     If,
     Else,
     While,
@@ -112,7 +111,6 @@ impl Lexer {
                         "null" => tokens.push_front(Token::Null),
                         "let" => tokens.push_front(Token::Let),
                         "def" => tokens.push_front(Token::Def),
-                        "print" => tokens.push_front(Token::Print),
                         "if" => tokens.push_front(Token::If),
                         "else" => tokens.push_front(Token::Else),
                         "while" => tokens.push_front(Token::While),
