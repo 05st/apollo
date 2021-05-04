@@ -29,7 +29,7 @@ enum Message {
 type RValue = Result<Value, String>;
 type RMessage = Result<Message, String>;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 struct Environment {
     parent: Option<Box<Environment>>,
     values: HashMap<String, Value>,
@@ -113,18 +113,18 @@ impl Interpreter {
                     if args.len() == params.len() {
                         match ftype {
                             FunctionType::User(stmt) => {
-                                let prev_env = self.environment.clone();
                                 let mut env = Environment::as_child(self.environment.clone());
                                 for _ in 0..args.len() {
                                     env.define(params.remove(0), self.expression(args.remove(0))?);
                                 }
-                                self.environment = env;
-                                let msg = self.statement(stmt)?;
-                                self.environment = prev_env;
-                                match msg {
-                                    Message::Return(v) => Ok(v),
-                                    _ => Ok(Value::Null)
+                                let mut ret = Value::Null;
+                                if let ASTNode::Block(decls) = stmt {
+                                    match self.block(decls, env)? {
+                                        Message::Return(v) => ret = v,
+                                        _ => (),
+                                    }
                                 }
+                                Ok(ret)
                             },
                             FunctionType::BuiltIn(f) => {
                                 let mut eval_args = Vec::new();
@@ -205,6 +205,22 @@ impl Interpreter {
         }
     }
 
+    fn block(&mut self, decls: Vec<ASTNode>, env: Environment) -> RMessage {
+        self.environment = env;
+        let mut msg = Message::None;
+        for decl in decls {
+            match self.statement(decl)? {
+                Message::None => (),
+                other => {
+                    msg = other;
+                    break;
+                }
+            }
+        }
+        self.environment = *(self.environment.clone().parent.unwrap());
+        Ok(msg)
+    }
+
     fn statement(&mut self, node: ASTNode) -> RMessage {
         match node {
             ASTNode::Compound(decls) => {
@@ -216,17 +232,7 @@ impl Interpreter {
                 }
                 Ok(Message::None)
             },
-            ASTNode::Block(decls) => {
-                self.environment = Environment::as_child(self.environment.clone());
-                for decl in decls {
-                    match self.statement(decl)? {
-                        Message::None => (),
-                        msg => return Ok(msg),
-                    }
-                }
-                self.environment = *self.environment.parent.clone().unwrap();
-                Ok(Message::None)
-            },
+            ASTNode::Block(decls) => self.block(decls, Environment::as_child(self.environment.clone())),
             ASTNode::If(cond, stmt1, stmt2) => {
                 if is_truthy(&self.expression(*cond)?) {
                     Ok(self.statement(*stmt1)?)
