@@ -8,7 +8,7 @@ use std::{
 
 #[derive(Debug, PartialEq, Clone)]
 enum FunctionType {
-    User(Vec<String>, ASTNode),
+    User(Vec<String>, ASTNode, EnvRef),
     Native(usize, fn(Vec<Value>) -> Value),
 }
 
@@ -32,6 +32,7 @@ enum Message {
 }
 
 type EnvRef = Rc<RefCell<Environment>>;
+#[derive(Debug, PartialEq)]
 struct Environment {
     values: HashMap<String, Value>,
     parent: Option<EnvRef>,
@@ -151,13 +152,13 @@ impl Interpreter {
                 let func_type = Rc::clone(&env).borrow().get(&id)?;
                 if let Value::Function(func_type) = func_type {
                     let arg_count = match &func_type {
-                        FunctionType::User(params, _) => params.len(),
+                        FunctionType::User(params, _, _) => params.len(),
                         FunctionType::Native(count, _) => *count,
                     };
                     if arg_count == args.len() {
                         match func_type {
-                            FunctionType::User(params, def) => {
-                                let child_env = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(&env)))));
+                            FunctionType::User(params, def, closure) => {
+                                let child_env = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(&closure)))));
                                 {
                                     for (i, arg) in args.iter().enumerate() {
                                         Rc::clone(&child_env).borrow_mut().define(&params[i], self.expression(arg.clone(), Rc::clone(&env))?);
@@ -219,7 +220,7 @@ impl Interpreter {
                 Ok(Message::None)
             },
             ASTNode::Function(id, params, def) => {
-                env.borrow_mut().define(&id, Value::Function(FunctionType::User(params, *def)));
+                env.borrow_mut().define(&id, Value::Function(FunctionType::User(params, *def, Rc::clone(&env))));
                 Ok(Message::None)
             },
             ASTNode::If(cond, stmt1, stmt2) => if is_truthy(&self.expression(*cond, Rc::clone(&env))?) { self.statement(*stmt1, Rc::clone(&env)) } else {
