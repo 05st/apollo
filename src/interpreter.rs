@@ -148,7 +148,8 @@ impl Interpreter {
                 }
             },
             ASTNode::Call(id, args) => {
-                if let Value::Function(func_type) = Rc::clone(&env).borrow().get(&id)? {
+                let func_type = Rc::clone(&env).borrow().get(&id)?;
+                if let Value::Function(func_type) = func_type {
                     let arg_count = match &func_type {
                         FunctionType::User(params, _) => params.len(),
                         FunctionType::Native(count, _) => *count,
