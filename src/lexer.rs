@@ -5,7 +5,7 @@ pub enum Token {
     Number(f64),
     Identifier(String),
     Bool(bool),
-    Str(String),
+    String(String),
     Null,
 
     Let,
@@ -132,7 +132,7 @@ impl Lexer {
                             _ => buffer += &iter.next().unwrap().to_string(),
                         }
                     }
-                    tokens.push_front(Token::Str(buffer));
+                    tokens.push_front(Token::String(buffer));
                 },
                 '(' => tokens.push_front(Token::LeftParen),
                 ')' => tokens.push_front(Token::RightParen),

@@ -23,25 +23,25 @@ pub enum Operator {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ASTNode {
-    Number(f64),
-    Bool(bool),
-    Str(String),
-    Null,
-    Binary(Operator, Box<ASTNode>, Box<ASTNode>),
-    Unary(Operator, Box<ASTNode>),
+    Compound(Vec<ASTNode>),
+    Block(Vec<ASTNode>),
+    ExprStmt(Box<ASTNode>),
+    VarDecl(String, Box<Option<ASTNode>>),
+    Function(String, Vec<String>, Box<ASTNode>),
     If(Box<ASTNode>, Box<ASTNode>, Box<Option<ASTNode>>),
     While(Box<ASTNode>, Box<ASTNode>),
     Break,
     Continue,
-    VarDecl(String, Box<Option<ASTNode>>),
-    ExprStmt(Box<ASTNode>),
-    Variable(String),
-    Compound(Vec<ASTNode>),
-    Block(Vec<ASTNode>),
-    Assign(String, Box<ASTNode>),
-    Function(String, Vec<String>, Box<ASTNode>),
-    Call(String, Vec<ASTNode>),
     Return(Box<ASTNode>),
+    Assign(String, Box<ASTNode>),
+    Binary(Operator, Box<ASTNode>, Box<ASTNode>),
+    Unary(Operator, Box<ASTNode>),
+    Call(String, Vec<ASTNode>),
+    Variable(String),
+    Number(f64),
+    Bool(bool),
+    String(String),
+    Null,
 }
 
 type RASTNode = Result<ASTNode, String>;
@@ -420,7 +420,7 @@ impl Parser {
         match token {
             Token::Number(x) => Ok(ASTNode::Number(x)),
             Token::Bool(x) => Ok(ASTNode::Bool(x)),
-            Token::Str(x) => Ok(ASTNode::Str(x)),
+            Token::String(x) => Ok(ASTNode::String(x)),
             Token::Null => Ok(ASTNode::Null),
             Token::LeftParen => {
                 let expr = self.expression()?;
