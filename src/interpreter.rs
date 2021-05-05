@@ -156,8 +156,9 @@ impl Interpreter {
                     _ => Err(format!("Invalid binary operator {:?}", op)),
                 }
             },
-            ASTNode::Call(id, args) => {
-                let func_type = Rc::clone(&env).borrow().get(&id)?;
+            ASTNode::Lambda(params, def) => Ok(Value::Function(FunctionType::User(params, *def, env.clone()))),
+            ASTNode::Call(func, args) => {
+                let func_type = self.expression(*func, Rc::clone(&env))?;
                 if let Value::Function(func_type) = func_type {
                     let arg_count = match &func_type {
                         FunctionType::User(params, _, _) => params.len(),
@@ -191,10 +192,10 @@ impl Interpreter {
                             },
                         }
                     } else {
-                        Err(format!("Expected {} arguments when calling '{}', got {}", arg_count, id, args.len()))
+                        Err(format!("Expected {} arguments when calling function, got {}", arg_count, args.len()))
                     }
                 } else {
-                    Err(format!("Undefined function '{}'", id))
+                    Err("Undefined function".to_string())
                 }
             },
             _ => Err(format!("Invalid expression {:?}", node)),

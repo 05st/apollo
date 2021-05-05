@@ -33,10 +33,11 @@ pub enum ASTNode {
     Break,
     Continue,
     Return(Box<ASTNode>),
+    Lambda(Vec<String>, Box<ASTNode>),
     Assign(String, Box<ASTNode>),
     Binary(Operator, Box<ASTNode>, Box<ASTNode>),
     Unary(Operator, Box<ASTNode>),
-    Call(String, Vec<ASTNode>),
+    Call(Box<ASTNode>, Vec<ASTNode>),
     Variable(String),
     Number(f64),
     Bool(bool),
@@ -86,7 +87,7 @@ impl Parser {
             let node = ASTNode::VarDecl(id, Box::new({
                 if let Token::Equal = self.lexer.peek() {
                     self.lexer.next();
-                    Option::Some(self.equality()?)
+                    Option::Some(self.expression()?)
                 } else {
                     Option::None
                 }
@@ -237,7 +238,10 @@ impl Parser {
     }
 
     fn expression(&mut self) -> RASTNode {
-        self.assignment()
+        match self.lexer.peek() {
+            Token::Def => self.lambda(),
+            _ => self.assignment(),
+        }
     }
 
     fn assignment(&mut self) -> RASTNode {
@@ -247,7 +251,7 @@ impl Parser {
             Token::Equal | Token::PlusEqual | Token::DashEqual | Token::AsteriskEqual | Token::SlashEqual | Token::PercentEqual | Token::CaretEqual => {
                 if let ASTNode::Variable(id) = expr.clone() {
                     let oper = self.lexer.next();
-                    let mut value = self.assignment()?;
+                    let mut value = self.expression()?;
                     match oper {
                         Token::PlusEqual => value = ASTNode::Binary(Operator::Add, Box::new(expr), Box::new(value)),
                         Token::DashEqual => value = ASTNode::Binary(Operator::Subtract, Box::new(expr), Box::new(value)),
@@ -264,6 +268,21 @@ impl Parser {
             },
             _ => Ok(expr),
         }
+    }
+
+    fn lambda(&mut self) -> RASTNode {
+        self.expect(Token::Def)?;
+        self.expect(Token::LeftParen)?;
+        let params = self.params()?;
+        self.expect(Token::RightParen)?;
+        let def = match self.lexer.peek() {
+            Token::LeftBrace => self.block()?,
+            _ => {
+                let expr = self.expression()?;
+                ASTNode::Block(vec![ASTNode::Return(Box::new(expr))])
+            },
+        };
+        Ok(ASTNode::Lambda(params, Box::new(def)))
     }
 
     fn logic_or(&mut self) -> RASTNode {
@@ -392,10 +411,10 @@ impl Parser {
         let mut node = self.item()?;
         if let Token::LeftParen = self.lexer.peek() {
             self.lexer.next();
-            if let ASTNode::Variable(id) = node {
-                node = ASTNode::Call(id, self.arguments()?)
+            if let ASTNode::Variable(_) | ASTNode::Lambda(_, _) = node {
+                node = ASTNode::Call(Box::new(node), self.arguments()?)
             } else {
-                return Err(format!("Invalid function name {:?}", node));
+                return Err(format!("Invalid function {:?}", node));
             }
             self.expect(Token::RightParen)?;
         }
