@@ -44,10 +44,15 @@ pub struct Interpreter {
 
 impl Environment {
     fn get(&self, id: &str) -> RValue {
-        match (self.values.get(id), &self.parent) {
-            (Some(value), _) => Ok(value.clone()),
-            (None, Some(parent)) => parent.borrow().get(id),
-            _ => Err(format!("Attempt to get '{}' which is not defined", id)),
+        match self.values.get(id) {
+            Some(value) => Ok(value.clone()),
+            None => {
+                if let Some(parent) = &self.parent {
+                    parent.borrow().get(id)
+                } else {
+                    Err(format!("Attempt to get '{}' which is not defined", id))
+                }
+            }
         }
     }
 
@@ -109,8 +114,11 @@ impl Interpreter {
             ASTNode::Bool(val) => Ok(Value::Bool(val)),
             ASTNode::String(val) => Ok(Value::String(val)),
             ASTNode::Null => Ok(Value::Null),
-            ASTNode::Variable(id) => env.borrow().get(&id),
-            ASTNode::Assign(id, expr) => Rc::clone(&env).borrow_mut().set(&id, self.expression(*expr, env)?),
+            ASTNode::Variable(id) => Rc::clone(&env).borrow().get(&id),
+            ASTNode::Assign(id, expr) => {
+                let eval = self.expression(*expr, Rc::clone(&env))?;
+                Rc::clone(&env).borrow_mut().set(&id, eval)
+            },
             ASTNode::Unary(op, expr) => {
                 match op {
                     Operator::Subtract => {
@@ -158,11 +166,11 @@ impl Interpreter {
                     if arg_count == args.len() {
                         match func_type {
                             FunctionType::User(params, def, closure) => {
-                                let child_env = Rc::new(RefCell::new(Environment::new(Some(Rc::clone(&closure)))));
-                                {
-                                    for (i, arg) in args.iter().enumerate() {
-                                        Rc::clone(&child_env).borrow_mut().define(&params[i], self.expression(arg.clone(), Rc::clone(&env))?);
-                                    }
+                                closure.borrow_mut().parent = Some(env);
+                                let child_env = Rc::new(RefCell::new(Environment::new(Some(closure))));
+                                for (i, arg) in args.iter().enumerate() {
+                                    let eval = self.expression(arg.clone(), Rc::clone(&child_env))?;
+                                    child_env.borrow_mut().define(&params[i], eval);
                                 }
                                 if let ASTNode::Block(decls) = def {
                                     for decl in decls {
@@ -216,11 +224,12 @@ impl Interpreter {
             },
             ASTNode::ExprStmt(expr) => self.expression(*expr, env).and(Ok(Message::None)),
             ASTNode::VarDecl(id, init) => {
-                Rc::clone(&env).borrow_mut().define(&id, self.expression((*init).unwrap_or(ASTNode::Null), env)?);
+                let eval = self.expression((*init).unwrap_or(ASTNode::Null), Rc::clone(&env))?;
+                Rc::clone(&env).borrow_mut().define(&id, eval);
                 Ok(Message::None)
             },
             ASTNode::Function(id, params, def) => {
-                env.borrow_mut().define(&id, Value::Function(FunctionType::User(params, *def, Rc::clone(&env))));
+                Rc::clone(&env).borrow_mut().define(&id, Value::Function(FunctionType::User(params, *def, env.clone())));
                 Ok(Message::None)
             },
             ASTNode::If(cond, stmt1, stmt2) => if is_truthy(&self.expression(*cond, Rc::clone(&env))?) { self.statement(*stmt1, Rc::clone(&env)) } else {
