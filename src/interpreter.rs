@@ -32,14 +32,14 @@ enum Message {
 }
 
 type EnvRef = Rc<RefCell<Environment>>;
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 struct Environment {
     values: HashMap<String, Value>,
     parent: Option<EnvRef>,
 }
 
 pub struct Interpreter {
-    global: EnvRef,
+    environment: EnvRef,
 }
 
 impl Environment {
@@ -108,21 +108,21 @@ fn is_truthy(val: &Value) -> bool {
 }
 
 impl Interpreter {
-    fn expression(&mut self, node: ASTNode, env: EnvRef) -> RValue {
+    fn expression(&mut self, node: ASTNode) -> RValue {
         match node {
             ASTNode::Number(val) => Ok(Value::Number(val)),
             ASTNode::Bool(val) => Ok(Value::Bool(val)),
             ASTNode::String(val) => Ok(Value::String(val)),
             ASTNode::Null => Ok(Value::Null),
-            ASTNode::Variable(id) => Rc::clone(&env).borrow().get(&id),
+            ASTNode::Variable(id) => self.environment.clone().borrow().get(&id),
             ASTNode::Assign(id, expr) => {
-                let eval = self.expression(*expr, Rc::clone(&env))?;
-                Rc::clone(&env).borrow_mut().set(&id, eval)
+                let eval = self.expression(*expr)?;
+                self.environment.clone().borrow_mut().set(&id, eval)
             },
             ASTNode::Unary(op, expr) => {
                 match op {
                     Operator::Subtract => {
-                        match self.expression(*expr, env)? {
+                        match self.expression(*expr)? {
                             Value::Number(val) => Ok(Value::Number(-val)),
                             other => Err(format!("Invalid type for unary {:?}: {:?}", op, other)),
                         }
@@ -131,7 +131,7 @@ impl Interpreter {
                 }
             },
             ASTNode::Binary(op, left_expr, right_expr) => {
-                let (left, right) = (self.expression(*left_expr, Rc::clone(&env))?, self.expression(*right_expr, env)?);
+                let (left, right) = (self.expression(*left_expr)?, self.expression(*right_expr)?);
                 match op {
                     Operator::Add => {
                         match (left.clone(), right.clone()) {
@@ -156,9 +156,9 @@ impl Interpreter {
                     _ => Err(format!("Invalid binary operator {:?}", op)),
                 }
             },
-            ASTNode::Lambda(params, def) => Ok(Value::Function(FunctionType::User(params, *def, env.clone()))),
+            ASTNode::Lambda(params, def) => Ok(Value::Function(FunctionType::User(params, *def, self.environment.clone()))),
             ASTNode::Call(func, args) => {
-                let func_type = self.expression(*func, Rc::clone(&env))?;
+                let func_type = self.expression(*func)?;
                 if let Value::Function(func_type) = func_type {
                     let arg_count = match &func_type {
                         FunctionType::User(params, _, _) => params.len(),
@@ -167,26 +167,32 @@ impl Interpreter {
                     if arg_count == args.len() {
                         match func_type {
                             FunctionType::User(params, def, closure) => {
-                                closure.borrow_mut().parent = Some(env);
-                                let child_env = Rc::new(RefCell::new(Environment::new(Some(closure))));
+                                let mut child_env = Environment::new(Some(closure.clone()));
                                 for (i, arg) in args.iter().enumerate() {
-                                    let eval = self.expression(arg.clone(), Rc::clone(&child_env))?;
-                                    child_env.borrow_mut().define(&params[i], eval);
+                                    let eval = self.expression(arg.clone())?;
+                                    child_env.define(&params[i], eval);
                                 }
+                                let parent_env = self.environment.clone();
+                                self.environment = Rc::new(RefCell::new(child_env));
+                                let mut ret = Value::Null;
                                 if let ASTNode::Block(decls) = def {
-                                    for decl in decls {
-                                        match self.statement(decl, Rc::clone(&child_env))? {
-                                            Message::Return(val) => return Ok(val),
+                                    for decl in decls.iter() {
+                                        match self.statement(decl.clone())? {
+                                            Message::Return(val) => {
+                                                ret = val;
+                                                break;
+                                            },
                                             _ => (),
                                         }
                                     }
                                 }
-                                Ok(Value::Null)
+                                self.environment = parent_env;
+                                Ok(ret)
                             },
                             FunctionType::Native(_, def) => {
                                 let mut eval_args = Vec::new();
                                 for arg in args {
-                                    eval_args.push(self.expression(arg.clone(), Rc::clone(&env))?);
+                                    eval_args.push(self.expression(arg.clone())?);
                                 }
                                 def(eval_args)
                             },
@@ -202,11 +208,11 @@ impl Interpreter {
         }
     }
 
-    fn statement(&mut self, node: ASTNode, env: EnvRef) -> RMessage {
+    fn statement(&mut self, node: ASTNode) -> RMessage {
         match node {
             ASTNode::Compound(decls) => {
                 for decl in decls {
-                    match self.statement(decl, Rc::clone(&env))? {
+                    match self.statement(decl)? {
                         Message::None => (),
                         other => return Ok(other),
                     }
@@ -214,35 +220,42 @@ impl Interpreter {
                 Ok(Message::None)
             },
             ASTNode::Block(decls) => {
-                let child_env = Rc::new(RefCell::new(Environment::new(Some(env))));
+                let child_env = RefCell::new(Environment::new(Some(self.environment.clone())));
+                let parent_env = self.environment.clone();
+                self.environment = Rc::new(child_env);
+                let mut msg = Message::None;
                 for decl in decls {
-                    match self.statement(decl, Rc::clone(&child_env))? {
+                    match self.statement(decl)? {
                         Message::None => (),
-                        other => return Ok(other),
+                        other => {
+                            msg = other;
+                            break;
+                        },
                     }
                 }
-                Ok(Message::None)
+                self.environment = parent_env;
+                Ok(msg)
             },
-            ASTNode::ExprStmt(expr) => self.expression(*expr, env).and(Ok(Message::None)),
+            ASTNode::ExprStmt(expr) => self.expression(*expr).and(Ok(Message::None)),
             ASTNode::VarDecl(id, init) => {
-                let eval = self.expression((*init).unwrap_or(ASTNode::Null), Rc::clone(&env))?;
-                Rc::clone(&env).borrow_mut().define(&id, eval);
+                let eval = self.expression((*init).unwrap_or(ASTNode::Null))?;
+                self.environment.borrow_mut().define(&id, eval);
                 Ok(Message::None)
             },
             ASTNode::Function(id, params, def) => {
-                Rc::clone(&env).borrow_mut().define(&id, Value::Function(FunctionType::User(params, *def, env.clone())));
+                self.environment.borrow_mut().define(&id, Value::Function(FunctionType::User(params, *def, self.environment.clone())));
                 Ok(Message::None)
             },
-            ASTNode::If(cond, stmt1, stmt2) => if is_truthy(&self.expression(*cond, Rc::clone(&env))?) { self.statement(*stmt1, Rc::clone(&env)) } else {
+            ASTNode::If(cond, stmt1, stmt2) => if is_truthy(&self.expression(*cond)?) { self.statement(*stmt1) } else {
                 if let Some(stmt) = *stmt2 {
-                    self.statement(stmt, env)
+                    self.statement(stmt)
                 } else {
                     Ok(Message::None)
                 }
             },
             ASTNode::While(cond, stmt) => {
-                while is_truthy(&self.expression(*cond.clone(), Rc::clone(&env))?) {
-                    match self.statement(*stmt.clone(), Rc::clone(&env))? {
+                while is_truthy(&self.expression(*cond.clone())?) {
+                    match self.statement(*stmt.clone())? {
                         Message::None => (),
                         Message::Break => break,
                         Message::Continue => continue,
@@ -253,13 +266,13 @@ impl Interpreter {
             },
             ASTNode::Break => Ok(Message::Break),
             ASTNode::Continue => Ok(Message::Continue),
-            ASTNode::Return(expr) => Ok(Message::Return(self.expression(*expr, env)?)),
+            ASTNode::Return(expr) => Ok(Message::Return(self.expression(*expr)?)),
             _ => Err(format!("Invalid statement {:#?}", node)),
         }
     }
 
     pub fn interpret(&mut self, root: ASTNode) -> Result<(), String> {
-        match self.statement(root, Rc::clone(&self.global)) {
+        match self.statement(root) {
             Ok(_) => Ok(()),
             Err(msg) => Err(msg),
         }
@@ -298,7 +311,7 @@ impl Interpreter {
             env.define(id, Value::Function(FunctionType::Native(*args, *func)));
         }
         Interpreter {
-            global: Rc::new(RefCell::new(env)),
+            environment: Rc::new(RefCell::new(env)),
         }
     }
 }

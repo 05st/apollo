@@ -32,7 +32,7 @@ struct Application {
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(target_os="windows")]
-    ansi_term::enable_ansi_supprt();
+    ansi_term::enable_ansi_support();
 
     let mut interpreter = Interpreter::new();
     let application = Application::from_args();
@@ -49,7 +49,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else {
         let mut repl = Editor::<()>::new();
         loop {
-            let read = repl.readline(&format!("{}", Yellow.paint("> ")));
+            let read = repl.readline("> ");
             match read {
                 Ok(input) => {
                     repl.add_history_entry(&input);
