@@ -4,6 +4,7 @@ Apollo is a basic dynamically typed programming language which features a famili
 ## Features
 Currently, Apollo is very new and while being usable, it is lacking features. Some features currently implemented are:
 * Functions
+* Basic Objects
 * Closures
 * Lambdas
 * Conditions
