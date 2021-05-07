@@ -182,7 +182,8 @@ impl Interpreter {
                 Ok(Value::Object(Rc::new(RefCell::new(map))))
             },
             ASTNode::Call(func, args) => {
-                let func_type = self.expression(*func)?;
+
+                let func_type = self.expression(*func.clone())?;
                 if let Value::Function(func_type) = func_type {
                     let arg_count = match &func_type {
                         FunctionType::User(params, _, _) => params.len(),
@@ -192,6 +193,9 @@ impl Interpreter {
                         match func_type {
                             FunctionType::User(params, def, closure) => {
                                 let mut child_env = Environment::new(Some(closure.clone()));
+                                if let ASTNode::Index(pexpr, _) = *func {
+                                    child_env.define("self", self.expression(*pexpr)?);
+                                }
                                 for (i, arg) in args.iter().enumerate() {
                                     let eval = self.expression(arg.clone())?;
                                     child_env.define(&params[i], eval);
