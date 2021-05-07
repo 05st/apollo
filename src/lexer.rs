@@ -17,6 +17,7 @@ pub enum Token {
     Break,
     Continue,
     Return,
+    Obj,
 
     LeftParen,
     RightParen,
@@ -53,6 +54,7 @@ pub enum Token {
     Dot,
     Semicolon,
     Comma,
+    Colon,
 
     UNDEFINED,
     EOF,
@@ -118,6 +120,7 @@ impl Lexer {
                         "break" => tokens.push_front(Token::Break),
                         "continue" => tokens.push_front(Token::Continue),
                         "return" => tokens.push_front(Token::Return),
+                        "obj" => tokens.push_front(Token::Obj),
                         _ => tokens.push_front(Token::Identifier(buffer)),
                     }
                 },
@@ -174,6 +177,7 @@ impl Lexer {
                 '.' => tokens.push_front(Token::Dot),
                 ';' => tokens.push_front(Token::Semicolon),
                 ',' => tokens.push_front(Token::Comma),
+                ':' => tokens.push_front(Token::Colon),
                 _ => (),
             }
         }

@@ -34,11 +34,14 @@ pub enum ASTNode {
     Continue,
     Return(Box<ASTNode>),
     Lambda(Vec<String>, Box<ASTNode>),
+    Object(Vec<(String, ASTNode)>),
     Assign(String, Box<ASTNode>),
     Binary(Operator, Box<ASTNode>, Box<ASTNode>),
     Unary(Operator, Box<ASTNode>),
     Call(Box<ASTNode>, Vec<ASTNode>),
     Variable(String),
+    Index(Box<ASTNode>, String),
+    Set(Box<ASTNode>, String, Box<ASTNode>),
     Number(f64),
     Bool(bool),
     String(String),
@@ -54,7 +57,7 @@ pub struct Parser {
 impl Parser {
     fn expect(&mut self, token: Token) -> Result<Token, String> {
         let next = self.lexer.next();
-        if next == token {
+        if std::mem::discriminant(&next) == std::mem::discriminant(&token) {
             Ok(next)
         } else {
             Err(format!("Expected {:?}", token))
@@ -240,6 +243,7 @@ impl Parser {
     fn expression(&mut self) -> RASTNode {
         match self.lexer.peek() {
             Token::Def => self.lambda(),
+            Token::Obj => self.object(),
             _ => self.assignment(),
         }
     }
@@ -249,19 +253,23 @@ impl Parser {
 
         match self.lexer.peek() {
             Token::Equal | Token::PlusEqual | Token::DashEqual | Token::AsteriskEqual | Token::SlashEqual | Token::PercentEqual | Token::CaretEqual => {
-                if let ASTNode::Variable(id) = expr.clone() {
+                if let ASTNode::Variable(_) | ASTNode::Index(_, _) = expr.clone() {
                     let oper = self.lexer.next();
                     let mut value = self.expression()?;
                     match oper {
-                        Token::PlusEqual => value = ASTNode::Binary(Operator::Add, Box::new(expr), Box::new(value)),
-                        Token::DashEqual => value = ASTNode::Binary(Operator::Subtract, Box::new(expr), Box::new(value)),
-                        Token::AsteriskEqual => value = ASTNode::Binary(Operator::Multiply, Box::new(expr), Box::new(value)),
-                        Token::SlashEqual => value = ASTNode::Binary(Operator::Divide, Box::new(expr), Box::new(value)),
-                        Token::PercentEqual => value = ASTNode::Binary(Operator::Modulo, Box::new(expr), Box::new(value)),
-                        Token::CaretEqual => value = ASTNode::Binary(Operator::Exponent, Box::new(expr), Box::new(value)),
+                        Token::PlusEqual => value = ASTNode::Binary(Operator::Add, Box::new(expr.clone()), Box::new(value)),
+                        Token::DashEqual => value = ASTNode::Binary(Operator::Subtract, Box::new(expr.clone()), Box::new(value)),
+                        Token::AsteriskEqual => value = ASTNode::Binary(Operator::Multiply, Box::new(expr.clone()), Box::new(value)),
+                        Token::SlashEqual => value = ASTNode::Binary(Operator::Divide, Box::new(expr.clone()), Box::new(value)),
+                        Token::PercentEqual => value = ASTNode::Binary(Operator::Modulo, Box::new(expr.clone()), Box::new(value)),
+                        Token::CaretEqual => value = ASTNode::Binary(Operator::Exponent, Box::new(expr.clone()), Box::new(value)),
                         _ => (),
                     };
-                    Ok(ASTNode::Assign(id, Box::new(value)))
+                    match expr {
+                        ASTNode::Variable(id) => Ok(ASTNode::Assign(id, Box::new(value))),
+                        ASTNode::Index(left, id) => Ok(ASTNode::Set(left, id, Box::new(value))),
+                        _ => Err(format!("Invalid assignment target {:?}", expr)),
+                    }
                 } else {
                     Err(format!("Invalid assignment target {:?}", expr))
                 }
@@ -283,6 +291,39 @@ impl Parser {
             },
         };
         Ok(ASTNode::Lambda(params, Box::new(def)))
+    }
+
+    fn object(&mut self) -> RASTNode {
+        self.expect(Token::Obj)?;
+        self.expect(Token::LeftBrace)?;
+        let mut key_vals = Vec::new();
+        match self.lexer.peek() {
+            Token::RightBrace => (),
+            _ => {
+                match self.lexer.peek() {
+                    Token::Identifier(key) => {
+                        self.lexer.next();
+                        self.expect(Token::Colon)?;
+                        key_vals.push((key, self.expression()?));
+                    },
+                    _ => return Err("Invalid object key".to_string()),
+                }
+            },
+        }
+        while let Token::Comma = self.lexer.peek() {
+            self.lexer.next();
+            if let Token::Identifier(key) = self.lexer.peek() {
+                self.lexer.next();
+                self.expect(Token::Colon)?;
+                key_vals.push((key, self.expression()?));
+            } else if let Token::RightBrace = self.lexer.peek() {
+                break;
+            } else {
+                return Err("Invalid object key".to_string());
+            }
+        }
+        self.expect(Token::RightBrace)?;
+        Ok(ASTNode::Object(key_vals))
     }
 
     fn logic_or(&mut self) -> RASTNode {
@@ -409,20 +450,27 @@ impl Parser {
 
     fn call(&mut self) -> RASTNode {
         let mut node = self.item()?;
-        if let Token::LeftParen = self.lexer.peek() {
-            self.lexer.next();
-            if let ASTNode::Variable(_) | ASTNode::Lambda(_, _) = node {
-                node = ASTNode::Call(Box::new(node), self.arguments()?)
+        loop {
+            if let Token::LeftParen = self.lexer.peek() {
+                self.lexer.next();
+                node = ASTNode::Call(Box::new(node), self.arguments()?);
+                self.expect(Token::RightParen)?;
+            } else if let Token::Dot = self.lexer.peek() {
+                self.lexer.next();
+                if let Token::Identifier(id) = self.lexer.next() {
+                    node = ASTNode::Index(Box::new(node), id);
+                } else {
+                    return Err("Expected identifier when indexing".to_string());
+                }
             } else {
-                return Err(format!("Invalid function {:?}", node));
+                break;
             }
-            self.expect(Token::RightParen)?;
         }
         Ok(node)
     }
 
     fn arguments(&mut self) -> Result<Vec<ASTNode>, String> {
-        let mut list = vec![];
+        let mut list = Vec::new();
         match self.lexer.peek() {
             Token::RightParen => (),
             _ => list.push(self.expression()?),

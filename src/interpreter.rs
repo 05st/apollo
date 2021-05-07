@@ -19,6 +19,7 @@ enum Value {
     Bool(bool),
     String(String),
     Function(FunctionType),
+    Object(Rc<RefCell<HashMap<String, Value>>>),
     Null,
 }
 
@@ -103,6 +104,7 @@ fn is_truthy(val: &Value) -> bool {
         Value::Bool(b) => *b,
         Value::String(_) => true,
         Value::Function(_) => true,
+        Value::Object(_) => false,
         Value::Null => false,
     }
 }
@@ -115,9 +117,24 @@ impl Interpreter {
             ASTNode::String(val) => Ok(Value::String(val)),
             ASTNode::Null => Ok(Value::Null),
             ASTNode::Variable(id) => self.environment.clone().borrow().get(&id),
+            ASTNode::Index(expr, id) => {
+                match self.expression(*expr)? {
+                    Value::Object(map) => Ok(map.borrow().get(&id).unwrap_or(&Value::Null).clone()),
+                    other => Err(format!("Attempt to index {:?}", other)),
+                }
+            },
             ASTNode::Assign(id, expr) => {
                 let eval = self.expression(*expr)?;
                 self.environment.clone().borrow_mut().set(&id, eval)
+            },
+            ASTNode::Set(left, id, right) => {
+                let (eleft, eright) = (self.expression(*left)?, self.expression(*right)?);
+                if let Value::Object(map) = eleft {
+                    map.borrow_mut().insert(id, eright.clone());
+                    Ok(eright)
+                } else {
+                    Err(format!("Attempt to set field of {:?}", eleft))
+                }
             },
             ASTNode::Unary(op, expr) => {
                 match op {
@@ -157,6 +174,13 @@ impl Interpreter {
                 }
             },
             ASTNode::Lambda(params, def) => Ok(Value::Function(FunctionType::User(params, *def, self.environment.clone()))),
+            ASTNode::Object(key_vals) => {
+                let mut map = HashMap::new();
+                for (key, expr) in key_vals {
+                    map.insert(key, self.expression(expr)?);
+                }
+                Ok(Value::Object(Rc::new(RefCell::new(map))))
+            },
             ASTNode::Call(func, args) => {
                 let func_type = self.expression(*func)?;
                 if let Value::Function(func_type) = func_type {
@@ -281,12 +305,25 @@ impl Interpreter {
     pub fn new() -> Interpreter {
         let mut env = Environment::new(None);
         let natives: Vec<(&str, usize, fn(Vec<Value>) -> RValue)> = vec![
+            ("clone_obj", 1, |args| {
+                match &args[0] {
+                    Value::Object(map) => {
+                        let mut new_map = HashMap::new();
+                        for (k, v) in map.clone().borrow().clone().into_iter() {
+                            new_map.insert(k, v);
+                        }
+                        Ok(Value::Object(Rc::new(RefCell::new(new_map))))
+                    },
+                    other => Err(format!("Invalid types for 'clone_obj' function: {:?}", other))
+                }
+            }),
             ("print", 1, |args| {
                 match &args[0] {
                     Value::Number(x) => println!("{}", x),
                     Value::Bool(x) => println!("{}", x),
                     Value::String(x) => println!("{}", x),
                     Value::Function(_) => println!("function"),
+                    Value::Object(_) => println!("object"),
                     Value::Null => println!("null"),               
                 };
                 Ok(Value::Null)
