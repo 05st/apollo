@@ -46,6 +46,7 @@ pub enum ASTNode {
     Bool(bool),
     String(String),
     Null,
+    List(Vec<ASTNode>),
 }
 
 type RASTNode = Result<ASTNode, String>;
@@ -495,6 +496,15 @@ impl Parser {
                 Ok(expr)
             },
             Token::Identifier(x) => Ok(ASTNode::Variable(x)),
+            Token::LeftBracket => {
+                let mut node = ASTNode::List(Vec::new());
+                match self.lexer.peek() {
+                    Token::RightBracket => (),
+                    _ => node = ASTNode::List(self.arguments()?),
+                }
+                self.expect(Token::RightBracket)?;
+                Ok(node)
+            },
             _ => Err(format!("Invalid item token {:?}", token)),
         }
     }

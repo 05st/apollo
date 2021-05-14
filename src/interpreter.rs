@@ -20,6 +20,7 @@ enum Value {
     String(String),
     Function(FunctionType),
     Object(Rc<RefCell<HashMap<String, Value>>>),
+    List(Vec<Value>),
     Null,
 }
 
@@ -105,6 +106,7 @@ fn is_truthy(val: &Value) -> bool {
         Value::String(_) => true,
         Value::Function(_) => true,
         Value::Object(_) => false,
+        Value::List(v) => v.len() > 0,
         Value::Null => false,
     }
 }
@@ -154,6 +156,11 @@ impl Interpreter {
                         match (left.clone(), right.clone()) {
                             (Value::Number(val1), Value::Number(val2)) => Ok(Value::Number(val1 + val2)),
                             (Value::String(val1), Value::String(val2)) => Ok(Value::String(format!("{}{}", val1, val2))),
+                            (Value::List(val1), Value::List(val2)) => {
+                                let mut nvals = val1.clone();
+                                for x in val2 { nvals.push(x) };
+                                Ok(Value::List(nvals))
+                            },
                             _ => Err(format!("Invalid types for binary Add: {:?}, {:?}", left, right)),
                         }
                     },
@@ -181,8 +188,14 @@ impl Interpreter {
                 }
                 Ok(Value::Object(Rc::new(RefCell::new(map))))
             },
+            ASTNode::List(vals) => {
+                let mut evals = Vec::new();
+                for v in vals {
+                    evals.push(self.expression(v)?);
+                }
+                Ok(Value::List(evals))
+            },
             ASTNode::Call(func, args) => {
-
                 let func_type = self.expression(*func.clone())?;
                 if let Value::Function(func_type) = func_type {
                     let arg_count = match &func_type {
@@ -328,6 +341,7 @@ impl Interpreter {
                     Value::String(x) => println!("{}", x),
                     Value::Function(_) => println!("function"),
                     Value::Object(_) => println!("object"),
+                    Value::List(l) => println!("{:?}", l),
                     Value::Null => println!("null"),               
                 };
                 Ok(Value::Null)
